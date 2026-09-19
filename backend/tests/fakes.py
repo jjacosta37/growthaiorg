@@ -44,6 +44,7 @@ class FakeMessages:
         self._responses = list(responses)
         self._responder = responder
         self.calls: list[dict] = []
+        self.batches = FakeBatches()
 
     def create(self, **params):
         self.calls.append(params)
@@ -64,3 +65,30 @@ class FakeAnthropic:
 
     def __init__(self, *responses, responder=None):
         self.messages = FakeMessages(responses, responder)
+
+
+class FakeBatches:
+    """messages.batches: create() records requests; results come from `answer(custom_id, params)`."""
+
+    def __init__(self):
+        self.created: list[list[dict]] = []
+        self.answer = None  # (custom_id, params) -> message | ("errored"|"expired"|"canceled", detail)
+        self.ended = True
+
+    def create(self, requests):
+        self.created.append(requests)
+        return SimpleNamespace(id=f"msgbatch_{len(self.created)}", processing_status="in_progress")
+
+    def retrieve(self, batch_id):
+        return SimpleNamespace(id=batch_id, processing_status="ended" if self.ended else "in_progress")
+
+    def results(self, batch_id):
+        requests = self.created[int(batch_id.rsplit("_", 1)[1]) - 1]
+        for req in reversed(requests):  # results arrive in any order
+            out = self.answer(req["custom_id"], req["params"])
+            if isinstance(out, tuple):
+                kind, detail = out
+                result = SimpleNamespace(type=kind, error=SimpleNamespace(error=detail))
+            else:
+                result = SimpleNamespace(type="succeeded", message=out)
+            yield SimpleNamespace(custom_id=req["custom_id"], result=result)

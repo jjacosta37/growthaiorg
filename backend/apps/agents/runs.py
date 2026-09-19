@@ -59,9 +59,13 @@ class RunReporter:
 
 @contextmanager
 def running(run: AgentRun):
-    """Mark a run running; on exit mark it succeeded / partial (errors logged) / failed (exception)."""
+    """Mark a run running; on exit mark it succeeded / partial (errors logged) / failed (exception).
+
+    A pipeline can set run.status = WAITING_BATCH and return; a follow-up task later re-enters
+    `running(run)` to finish it (started_at is kept).
+    """
     run.status = AgentRun.Status.RUNNING
-    run.started_at = timezone.now()
+    run.started_at = run.started_at or timezone.now()
     run.save(update_fields=["status", "started_at"])
     reporter = RunReporter(run)
     try:

@@ -201,34 +201,58 @@ def _attempt(spec: PromptSpec, variables: dict, project, schema, run, extra_cach
 
     call.stop_reason = response.stop_reason or ""
     call.request_id = getattr(response, "_request_id", None) or ""
+    outcome = interpret_response(spec, schema, response)
+    _finish(call, usage, started, outcome.status, error=outcome.error)
+    outcome.raise_for_status(spec, call)
+    return LLMResult(text=outcome.text, parsed=outcome.parsed, call=call, model=call.model,
+                     prompt_version=spec.version)
 
+
+@dataclass
+class Outcome:
+    """How a finished response turned out. Shared by the sync and batch paths."""
+
+    status: str
+    text: str = ""
+    parsed: BaseModel | None = None
+    error: str = ""
+
+    def raise_for_status(self, spec: PromptSpec, call: LLMCall) -> None:
+        if self.status == LLMCall.Status.OK:
+            return
+        exc_class = {
+            LLMCall.Status.REFUSED: LLMRefused,
+            LLMCall.Status.TRUNCATED: LLMTruncated,
+            LLMCall.Status.INVALID_OUTPUT: LLMOutputInvalid,
+        }.get(self.status, LLMError)
+        raise exc_class(f"{spec.task}: {self.error}", call=call)
+
+
+def interpret_response(spec: PromptSpec, schema, response) -> Outcome:
     if response.stop_reason == "refusal":
         details = getattr(response, "stop_details", None)
         msg = f"refused ({getattr(details, 'category', None)}): {getattr(details, 'explanation', '')}"
-        _finish(call, usage, started, LLMCall.Status.REFUSED, error=msg)
-        raise LLMRefused(f"{spec.task}: {msg}", call=call)
+        return Outcome(LLMCall.Status.REFUSED, error=msg)
     if response.stop_reason == "max_tokens":
-        _finish(call, usage, started, LLMCall.Status.TRUNCATED, error=f"hit max_tokens={spec.max_tokens}")
-        raise LLMTruncated(f"{spec.task}: output truncated at max_tokens={spec.max_tokens}", call=call)
+        return Outcome(LLMCall.Status.TRUNCATED, error=f"output truncated at max_tokens={spec.max_tokens}")
     if response.stop_reason == "pause_turn":
-        _finish(call, usage, started, LLMCall.Status.ERROR, error="still paused after max continuations")
-        raise LLMError(f"{spec.task}: turn still paused after {MAX_PAUSE_TURNS} continuations", call=call)
-
+        return Outcome(LLMCall.Status.ERROR, error=f"turn still paused after {MAX_PAUSE_TURNS} continuations")
     text = response_text(response.content)
     try:
         parsed = parse_output(schema, text)
     except (ValidationError, json.JSONDecodeError) as exc:
-        _finish(call, usage, started, LLMCall.Status.INVALID_OUTPUT, error=str(exc)[:2000])
-        raise LLMOutputInvalid(f"{spec.task}: output failed schema {spec.schema}", call=call) from exc
-
-    _finish(call, usage, started, LLMCall.Status.OK)
-    return LLMResult(text=text, parsed=parsed, call=call, model=call.model, prompt_version=spec.version)
+        return Outcome(LLMCall.Status.INVALID_OUTPUT, text=text,
+                       error=f"output failed schema {spec.schema}: {str(exc)[:1500]}")
+    return Outcome(LLMCall.Status.OK, text=text, parsed=parsed)
 
 
-def _finish(call: LLMCall, usage: _Usage, started: float, status: str, error: str = "") -> None:
+def _finish(call: LLMCall, usage: _Usage, started: float | None, status: str, error: str = "",
+            is_batch: bool = False) -> None:
     call.status = status
     call.error = error
-    call.latency_ms = int((time.monotonic() - started) * 1000)
+    call.is_batch = is_batch
+    if started is not None:
+        call.latency_ms = int((time.monotonic() - started) * 1000)
     call.input_tokens = usage.input
     call.output_tokens = usage.output
     call.cache_read_tokens = usage.cache_read
@@ -241,5 +265,6 @@ def _finish(call: LLMCall, usage: _Usage, started: float, status: str, error: st
         cache_read_tokens=usage.cache_read,
         cache_write_tokens=usage.cache_write,
         web_search_requests=usage.web_search,
+        is_batch=is_batch,
     )
     call.save()

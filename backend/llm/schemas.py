@@ -50,3 +50,34 @@ class SubredditSuggestion(BaseModel):
 class RedditSuggestions(BaseModel):
     subreddits: list[SubredditSuggestion]
     keywords: list[str] = Field(description="Search phrases people use when asking about problems the product solves.")
+
+
+# --- Reddit Agent -----------------------------------------------------------------------
+
+
+@register
+class RelevanceScore(BaseModel):
+    score: int = Field(description="0-100: how relevant this post is and how well we could help.")
+    reason: str = Field(description="One line explaining the score.")
+    reply_worthwhile: bool = Field(description="Would a genuinely helpful reply from us add value here?")
+
+
+@register
+class RedditComment(BaseModel):
+    body: str = Field(description="The comment, in Reddit markdown.")
+    mentions_product: bool = Field(description="True if the comment mentions the product by name.")
+
+
+# --- Compliance lint (all agents) -------------------------------------------------------
+
+
+class ComplianceFlag(BaseModel):
+    rule: str = Field(description="One of: returns_claim, personalized_advice, disparagement, fabrication, "
+                                  "missing_disclosure, promotional, other")
+    excerpt: str = Field(description="The exact problematic text from the draft.")
+    explanation: str = Field(description="One line: why this breaks the rule.")
+
+
+@register
+class ComplianceLint(BaseModel):
+    flags: list[ComplianceFlag]

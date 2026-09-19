@@ -26,6 +26,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.agents",
     "apps.context",
+    "apps.inbox",
+    "apps.reddit",
 ]
 
 MIDDLEWARE = [
@@ -129,3 +131,9 @@ CONTEXT_MIN_PAGES_WARNING = 3
 # Apify: renders JavaScript-only pages during onboarding (and fetches Reddit from Milestone 3)
 APIFY_TOKEN = env("APIFY_TOKEN", default="")
 APIFY_RENDER_ACTOR = env("APIFY_RENDER_ACTOR", default="apify/website-content-crawler")
+
+# Reddit Agent
+REDDIT_SOURCE = env("REDDIT_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)
+APIFY_REDDIT_ACTOR = env("APIFY_REDDIT_ACTOR", default="harshmaur/reddit-scraper")
+LLM_BATCH_POLL_SECONDS = env.int("LLM_BATCH_POLL_SECONDS", default=120)
+LLM_BATCH_MAX_AGE_HOURS = 24

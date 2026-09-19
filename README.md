@@ -4,7 +4,7 @@ An internal AI growth assistant for OpenWealth. Sift reads the website, writes c
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`) and 2 (onboarding and context docs) are done.
+**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) and 3 (inbox and Reddit Agent) are done.
 
 ## API so far
 
@@ -19,6 +19,15 @@ The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 | `POST /api/context/docs/<kind>/regenerate/`, `GET .../revisions/` | Regenerate one doc; revision history |
 | `GET /api/context/pages/` | Crawled pages |
 | `GET /api/runs/?kind=`, `/api/runs/<id>/`, `/api/runs/<id>/events/?after=<id>` | Run history and incremental progress events |
+| `GET /api/inbox/counts/` | Sidebar badges: unread, and drafts ready per agent |
+| `GET /api/drafts/?agent=&status=new\|posted\|dismissed&sort=newest\|score` | Inbox list |
+| `GET /api/drafts/<id>/` | Detail: current content, copy text, open URL, source post, compliance flags, versions |
+| `POST /api/drafts/<id>/edit/` `{content}` | Save your edit (the original AI version is kept) |
+| `POST /api/drafts/<id>/regenerate/` `{nudge: shorter\|more_casual\|no_mention\|custom, instruction?}` | Regenerate (returns a run) |
+| `POST /api/drafts/<id>/mark-posted/` `{posted_url?}`, `/dismiss/` `{reason, note?}`, `/restore/`, `/read/` | Triage actions |
+| `GET /api/agents/`, `GET/PATCH /api/agents/<type>/` `{enabled?, cron?, config?}` | Agent status header and config (PATCH syncs the beat schedule) |
+| `POST /api/agents/<type>/run-now/`, `GET /api/agents/<type>/runs/` | Manual trigger and run history |
+| `GET /api/agents/reddit/skipped/?run=&min_score=` | Scanned-but-skipped posts with scores, for tuning the threshold |
 
 Only one context run (onboarding, recrawl or regenerate) can be active at a time; another request returns 409.
 
@@ -67,6 +76,8 @@ cd backend && ../.venv/bin/pytest
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith tracing of every LLM call |
 | `APIFY_TOKEN` | Renders JavaScript-only pages during onboarding; Reddit data (Milestone 3) |
 | `APIFY_RENDER_ACTOR` | Browser renderer actor (default `apify/website-content-crawler`) |
+| `REDDIT_SOURCE` | `apify` (default) or `fake` for local testing without Apify spend |
+| `LLM_BATCH_POLL_SECONDS` | How often scheduled runs check their scoring batch (default 120) |
 | `CRAWL_MAX_PAGES`, `CRAWL_DELAY_SECONDS` | Onboarding crawl limits (default 40 pages, 0.2s between requests) |
 
 ## How LLM calls work

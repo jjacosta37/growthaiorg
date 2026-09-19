@@ -5,16 +5,18 @@ the cached system prefix (`extra_cached`), so the five document calls in a row p
 """
 
 import hashlib
-from pathlib import Path
 
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
-from jinja2 import Template
 
 import llm
 from apps.agents.models import AgentConfig, AgentRun, AgentType, ExternalUsage
 from apps.agents.runs import RunReporter
+from apps.core.models import Project
+from apps.policy.models import ContentPolicy
+from apps.policy.packs import all_packs, get_pack
+from apps.policy.service import apply_pack, policy_for, render_compliance_doc
 from providers.crawl import ApifyRenderer, crawl_site
 from providers.crawl.urls import normalize
 
@@ -123,10 +125,31 @@ def generate_document(project, kind: str, run: AgentRun, site_block: str):
     )
 
 
-def write_compliance_template(project):
-    template = Path(settings.PROMPTS_DIR) / "templates" / "compliance.md"
-    text = Template(template.read_text(encoding="utf-8")).render(project_name=project.name)
-    return save_document(project, DocKind.COMPLIANCE, text, source=DocSource.TEMPLATE, prompt_version="template")
+def write_compliance_doc(project):
+    """The Compliance Guidelines doc, rendered from the project's policy pack and rules."""
+    text = render_compliance_doc(project)
+    pack = policy_for(project).pack
+    return save_document(project, DocKind.COMPLIANCE, text, source=DocSource.TEMPLATE, prompt_version=f"pack:{pack}")
+
+
+def identify_project(project, run: AgentRun, reporter: RunReporter, site_block: str) -> None:
+    """Name the product and suggest a policy pack, unless the user already set them."""
+    policy = policy_for(project)
+    name_is_default = project.name.strip() in ("", Project.DEFAULT_NAME)
+    if not name_is_default and policy.source == ContentPolicy.Source.USER:
+        return
+    reporter.step("Identifying the product and its industry")
+    packs = [{"id": p.id, "description": p.description} for p in all_packs()]
+    result = llm.complete("context.identify", {"packs": packs}, project=project, run=run, extra_cached=site_block)
+    ident = result.parsed
+    if name_is_default and ident.product_name.strip():
+        project.name = ident.product_name.strip()[:120]
+        project.save(update_fields=["name"])
+    if policy.source == ContentPolicy.Source.DEFAULT:
+        pack_id = ident.industry_pack if ident.industry_pack in {p["id"] for p in packs} else "general"
+        apply_pack(policy, pack_id, source=ContentPolicy.Source.SUGGESTED)
+        reporter.success(f"Identified {project.name}; using the “{get_pack(pack_id).name}” content rules "
+                         f"({ident.reason}). You can change them in Settings.")
 
 
 def update_project_facts(project, run: AgentRun) -> None:
@@ -207,6 +230,11 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
     if left_out:
         reporter.warning(f"{left_out} page(s) left out of the model input to stay within the size budget")
 
+    try:
+        identify_project(project, run, reporter, site_block)
+    except llm.LLMError as exc:
+        reporter.error(f"Couldn't identify the product: {exc}")
+
     for kind in AI_DOCS:
         title = DocKind(kind).label
         if not overwrite_edited and is_human_edited(project, kind):
@@ -219,9 +247,9 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
         except llm.LLMError as exc:
             reporter.error(f"Couldn't write {title}: {exc}")
 
-    if not project.documents.filter(kind=DocKind.COMPLIANCE).exists():
-        write_compliance_template(project)
-        reporter.success("Added Compliance Guidelines from the template")
+    if not is_human_edited(project, DocKind.COMPLIANCE):  # keep it in sync with the policy
+        write_compliance_doc(project)
+        reporter.success(f"Added Compliance Guidelines ({get_pack(policy_for(project).pack).name} rules)")
 
     for label, fn in (("Extracting product summary and competitors", lambda: update_project_facts(project, run)),
                       ("Suggesting subreddits and keywords", lambda: suggest_reddit_targets(project, run, reporter))):
@@ -242,8 +270,8 @@ def run_regenerate_document(run: AgentRun, reporter: RunReporter) -> None:
     kind = run.params["kind"]
     title = DocKind(kind).label
     if kind == DocKind.COMPLIANCE:
-        write_compliance_template(project)
-        reporter.success(f"Reset {title} from the template")
+        write_compliance_doc(project)
+        reporter.success(f"Rebuilt {title} from the content policy")
         return
     pages = list(CrawledPage.objects.filter(project=project))
     if not pages:

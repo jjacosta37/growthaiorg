@@ -9,12 +9,12 @@ from apps.context.models import CrawledPage
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
 from apps.inbox.nudges import nudge_instruction
+from apps.policy.service import policy_for
 
 from .config import ContentAgentConfig
 from .models import BlogTopic
 from .topics import is_near_duplicate, slugify
 
-DISCLAIMER = "This article is for educational purposes only and is not financial advice."
 META_LIMIT = 160
 
 
@@ -62,16 +62,16 @@ def post_variables(project, topic: BlogTopic, cfg: ContentAgentConfig, *, previo
     return {
         "project_name": project.name, "title": topic.title, "angle": topic.angle,
         "target_keywords": topic.target_keywords, "target_words": cfg.target_words, "guidance": cfg.guidance,
-        "disclaimer": DISCLAIMER, "previous": previous, "instruction": instruction,
+        "disclaimer": policy_for(project).blog_disclaimer, "previous": previous, "instruction": instruction,
     }
 
 
-def finalize_post(parsed) -> dict:
-    """Deterministic clean-up of the model's post: a valid slug, and the required disclaimer."""
+def finalize_post(parsed, disclaimer: str = "") -> dict:
+    """Deterministic clean-up of the model's post: a valid slug, and the policy's disclaimer if it has one."""
     body = parsed.body_md.strip()
     body = re.sub(r"\A#\s+.*\n+", "", body)  # the title is rendered separately; drop a stray H1
-    if DISCLAIMER.lower() not in body.lower():
-        body += f"\n\n---\n\n*{DISCLAIMER}*"
+    if disclaimer and disclaimer.lower() not in body.lower():
+        body += f"\n\n---\n\n*{disclaimer}*"
     return {
         "title": parsed.title.strip(),
         "meta_description": parsed.meta_description.strip(),
@@ -97,7 +97,7 @@ def draft_post(run: AgentRun, reporter: RunReporter, topic: BlogTopic, cfg: Cont
     except llm.LLMError as exc:
         reporter.error(f"Couldn't write “{topic.title[:70]}”: {exc}")
         return None
-    content = finalize_post(result.parsed)
+    content = finalize_post(result.parsed, policy_for(run.project).blog_disclaimer)
     draft = services.create_draft(run.project, agent_type=AgentType.CONTENT, kind=DraftKind.BLOG_POST,
                                   content=content, result=result, run=run, blog_topic=topic)
     compliance.lint(draft, run)
@@ -141,7 +141,7 @@ def regenerate(draft: Draft, nudge: str, instruction: str, run) -> DraftVersion:
     text = nudge_instruction(nudge, instruction, draft.project.name)
     variables = post_variables(draft.project, topic, cfg, previous=draft.current_version.content, instruction=text)
     result = llm.complete("content.post", variables, project=draft.project, run=run)
-    content = finalize_post(result.parsed)
+    content = finalize_post(result.parsed, policy_for(draft.project).blog_disclaimer)
     version = services.add_version(draft, content, source=DraftVersion.Source.AI_REGENERATED, result=result,
                                    nudge=nudge, instruction=instruction)
     compliance.lint(draft, run)

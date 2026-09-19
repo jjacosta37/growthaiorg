@@ -11,6 +11,7 @@ from apps.agents.runs import RunReporter
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
 from apps.inbox.nudges import nudge_instruction
+from apps.policy.service import policy_for
 from llm import batch as llm_batch
 from llm.models import LLMBatch
 from providers.reddit import ApifyRedditSource, FakeRedditSource, RedditSearch
@@ -92,6 +93,7 @@ def post_variables(post: RedditPost) -> dict:
     return {
         "subreddit": post.subreddit, "title": post.title, "body": body, "upvotes": post.upvotes,
         "num_comments": post.num_comments, "flair": post.flair, "age_hours": age_hours,
+        "author_role": policy_for(post.project).author_role,
     }
 
 

@@ -20,8 +20,8 @@ class FakeRedditSource:
 
 def sample_posts(query: RedditSearch) -> list[RedditPostData]:
     now = datetime.now(UTC)
-    subs = query.subreddits or ["personalfinance"]
-    kws = query.keywords or ["portfolio"]
+    subs = query.subreddits or ["smallbusiness"]
+    kws = query.keywords or ["getting started"]
     return [
         RedditPostData(
             reddit_id=f"fake{i}", subreddit=subs[i % len(subs)],

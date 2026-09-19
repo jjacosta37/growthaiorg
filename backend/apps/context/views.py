@@ -41,7 +41,9 @@ class StartOnboardingView(APIView):
         data.is_valid(raise_exception=True)
         project = Project.current()
         project.website_url = data.validated_data["website_url"]
-        project.save(update_fields=["website_url"])
+        if name := data.validated_data.get("name", "").strip():
+            project.name = name
+        project.save(update_fields=["website_url", "name"])
         params = {"max_pages": data.validated_data.get("max_pages")}
         return _start(project, AgentRun.Kind.ONBOARDING, params, onboarding_task)
 

@@ -20,9 +20,9 @@ MAX_QUERY_CHARS = 400  # Reddit rejects very long search queries; split keywords
 
 def search_term(keyword: str) -> str:
     """Reddit search syntax for one keyword. Recall beats precision here (scoring filters later):
-    - `rebalancing`            → rebalancing
-    - `roth conversion`        → (roth conversion)   all words, any order
-    - `"allocation drift"`     → "allocation drift"  exact phrase, only when I quote it myself
+    - `invoicing`              → invoicing
+    - `meal prep`              → (meal prep)         all words, any order
+    - `"cold email"`           → "cold email"        exact phrase, only when I quote it myself
     Exact-phrase matching on every keyword returned 0 posts in a live test; grouped words didn't."""
     kw = " ".join(keyword.split())
     if len(kw) > 2 and kw.startswith('"') and kw.endswith('"'):

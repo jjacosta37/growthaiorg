@@ -1,0 +1,51 @@
+id: general
+name: General
+description: Any product or service. Baseline rules every other pack builds on.
+rules:
+  - id: fabrication
+    title: No fabrication
+    description: >-
+      No invented statistics, studies, quotes, testimonials, customer counts or product features.
+      Only describe product features that the context documents state. Leave out any fact you're not sure of.
+  - id: time_sensitive_figures
+    title: No stale figures
+    description: >-
+      Don't state prices, limits, thresholds, rates or rules that change over time unless they appear in
+      the source post or the context documents. Describe the rule and point readers to the current official figure.
+  - id: disparagement
+    title: Fair to competitors
+    description: Don't disparage competitors. Describe differences factually and fairly, or not at all.
+  - id: unsupported_claims
+    title: No unsupported superlatives
+    description: >-
+      No "best", "only", "guaranteed" or similar claims that the context documents can't back up.
+  - id: missing_disclosure
+    title: Disclose affiliation
+    description: >-
+      Whenever the product is mentioned in a community setting (Reddit, forums, replies), disclose the
+      author's affiliation with it.
+  - id: promotional
+    title: Helpful, not promotional
+    description: >-
+      Community contributions must be genuinely helpful on their own. They must not read as advertisements.
+blog_disclaimer: ""
+compliance_doc: |
+  # Compliance Guidelines
+
+  These rules apply to everything Sift drafts for {{ project_name }}. They're a starting template, not legal
+  advice: review them and edit them to fit your industry and jurisdiction.
+
+  ## Hard rules
+  {% for r in rules %}{{ loop.index }}. **{{ r.title }}.** {{ r.description }}
+  {% endfor %}
+  ## Disclosure
+  When {{ project_name }} is mentioned in a community setting, include: "{{ disclosure }}"
+  {% if blog_disclaimer %}
+  ## Required disclaimer
+  Blog posts end with: "{{ blog_disclaimer }}"
+  {% endif %}
+  ## Before posting, check
+  - [ ] Every fact and number is sourced or removed
+  - [ ] Nothing outdated (prices, limits, rules)
+  - [ ] Competitors described fairly, if at all
+  - [ ] Affiliation disclosed wherever {{ project_name }} is mentioned in a community

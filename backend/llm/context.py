@@ -10,11 +10,28 @@ from collections.abc import Callable
 
 # (project) -> list of (title, markdown) in a stable order. Registered by apps.context.
 _context_provider: Callable | None = None
+# (project) -> guardrail variables {project_name, author_role, rules, disclosure, blog_disclaimer}.
+# Registered by apps.policy.
+_policy_provider: Callable | None = None
+
+GENERIC_GUARDRAILS = {"project_name": "the product", "author_role": "team", "rules": [], "disclosure": "",
+                      "blog_disclaimer": ""}
 
 
 def set_context_provider(fn: Callable) -> None:
     global _context_provider
     _context_provider = fn
+
+
+def set_policy_provider(fn: Callable) -> None:
+    global _policy_provider
+    _policy_provider = fn
+
+
+def guardrail_variables(project) -> dict:
+    if project is None or _policy_provider is None:
+        return dict(GENERIC_GUARDRAILS)
+    return _policy_provider(project)
 
 
 def context_documents(project) -> list[tuple[str, str]]:
@@ -24,9 +41,9 @@ def context_documents(project) -> list[tuple[str, str]]:
 
 
 def render_context_block(project, *, include_guardrails: bool = True, include_docs: bool = True) -> str:
-    from .prompts import guardrails_text
+    from .prompts import render_guardrails
 
-    parts = [guardrails_text()] if include_guardrails else []
+    parts = [render_guardrails(guardrail_variables(project))] if include_guardrails else []
     docs = context_documents(project) if include_docs else []
     if docs:
         parts.append("# Context documents\n\nWhat we know about the product. Treat these as ground truth.")

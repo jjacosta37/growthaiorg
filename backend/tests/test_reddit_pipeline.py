@@ -79,10 +79,11 @@ def test_second_run_dedupes_against_database(project, fake_anthropic, monkeypatc
 def test_product_mention_without_disclosure_is_flagged(project, fake_anthropic, monkeypatch):
     configure(project)
     install_source(monkeypatch, [post("a", "hi-yes")])
-    fake_anthropic(responder=reddit_responder(comment_body="Try OpenWealth, it tracks allocation drift."))
+    fake_anthropic(responder=reddit_responder(comment_body="Try Acme, it tracks this for you."))
     run_now(project)
     flags = Draft.objects.get().compliance_flags
     assert [f["rule"] for f in flags] == ["missing_disclosure"]
+    assert "(Disclosure: I'm the founder of Acme.)" in flags[0]["explanation"]
 
 
 def test_llm_lint_flags_are_stored(project, fake_anthropic, monkeypatch):

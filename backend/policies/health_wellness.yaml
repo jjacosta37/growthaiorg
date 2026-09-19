@@ -1,0 +1,16 @@
+id: health_wellness
+name: Health & wellness
+description: Health, fitness, nutrition, mental health, medical devices and wellness apps.
+extends: general
+rules:
+  - id: medical_claims
+    title: No medical claims
+    description: >-
+      Never claim or imply that the product diagnoses, treats, cures or prevents any condition, or produces
+      specific health outcomes.
+  - id: personalized_medical_advice
+    title: No personal medical advice
+    description: >-
+      Don't advise a specific person on diagnosis, treatment, medication or dosage. Share general,
+      well-established information and suggest a qualified professional.
+blog_disclaimer: This article is for informational purposes only and is not medical advice.

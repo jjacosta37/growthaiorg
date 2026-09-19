@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "llm",
     "apps.core",
+    "apps.policy",
     "apps.agents",
     "apps.context",
     "apps.inbox",
@@ -138,3 +139,6 @@ REDDIT_SOURCE = env("REDDIT_SOURCE", default="apify")  # "apify" | "fake" (local
 APIFY_REDDIT_ACTOR = env("APIFY_REDDIT_ACTOR", default="harshmaur/reddit-scraper")
 LLM_BATCH_POLL_SECONDS = env.int("LLM_BATCH_POLL_SECONDS", default=120)
 LLM_BATCH_MAX_AGE_HOURS = 24
+
+# Content policy packs (industry rules as data)
+POLICY_PACKS_DIR = BASE_DIR / "policies"

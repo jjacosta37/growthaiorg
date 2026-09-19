@@ -8,7 +8,7 @@ from apps.agents.models import AgentConfig, AgentRun
 from apps.agents.runs import create_run
 from apps.agents.tasks import run_agent_task
 from apps.content.models import BlogTopic
-from apps.content.pipeline import DISCLAIMER, finalize_post
+from apps.content.pipeline import finalize_post
 from apps.content.topics import is_near_duplicate, slugify
 from apps.context.models import CrawledPage
 from apps.core.models import Project
@@ -80,16 +80,20 @@ def test_near_duplicate_detection():
     assert slugify("  What's a 401(k) Match?! ") == "what-s-a-401-k-match"
 
 
+DISCLAIMER = "This article is for informational purposes only."
+
+
 def test_finalize_post_cleans_slug_h1_and_adds_disclaimer():
     parsed = BlogPostDraft.model_validate_json(post_json(body="# Stray H1\n\n## Intro\nHello."))
-    content = finalize_post(parsed)
+    content = finalize_post(parsed, DISCLAIMER)
     assert content["slug"] == "roth-conversion-ladders"
     assert content["keywords"] == ["roth conversion ladder", "backdoor roth"]
     assert content["body_md"].startswith("## Intro")
     assert content["body_md"].rstrip().endswith(f"*{DISCLAIMER}*")
 
     already = BlogPostDraft.model_validate_json(post_json(body=f"## Intro\nHi.\n\n*{DISCLAIMER}*"))
-    assert finalize_post(already)["body_md"].count(DISCLAIMER) == 1
+    assert finalize_post(already, DISCLAIMER)["body_md"].count(DISCLAIMER) == 1
+    assert finalize_post(parsed, "")["body_md"].rstrip().endswith("Hello.")  # packs without a disclaimer
 
 
 def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic):

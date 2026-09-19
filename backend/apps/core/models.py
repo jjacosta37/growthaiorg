@@ -18,9 +18,13 @@ class Project(models.Model):
     def __str__(self):
         return self.name
 
+    DEFAULT_NAME = "My project"
+
     @classmethod
     def current(cls) -> "Project":
+        """The single project for now. Every query already filters by project, so multi-project
+        support only needs this lookup to change."""
         project = cls.objects.first()
         if project is None:
-            project = cls.objects.create(name="OpenWealth")
+            project = cls.objects.create(name=cls.DEFAULT_NAME)
         return project

@@ -6,7 +6,7 @@ import re
 STOPWORDS = {
     "a", "an", "the", "and", "or", "of", "to", "for", "in", "on", "with", "your", "you", "how", "what", "why",
     "is", "are", "do", "does", "vs", "versus", "guide", "explained", "complete", "should", "can", "it", "its",
-    "when", "which", "every", "investor", "investors", "strategies", "strategy", "benefits", "real", "world",
+    "when", "which", "every", "strategies", "strategy", "benefits", "real", "world", "tips", "ways",
 }
 
 

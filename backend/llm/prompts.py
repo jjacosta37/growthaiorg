@@ -137,6 +137,11 @@ def _parse(task: str, version: str, raw: str) -> PromptSpec:
 
 
 @lru_cache(maxsize=1)
-def guardrails_text() -> str:
-    """Hard content rules included in every call that uses context (fintech compliance)."""
+def guardrails_template() -> str:
+    """Jinja template for the rules included in every call that uses context. Rendered per project
+    from its content policy (see llm.context), so nothing industry-specific lives here."""
     return (prompts_dir() / "_system" / "guardrails.md").read_text(encoding="utf-8").strip()
+
+
+def render_guardrails(variables: dict) -> str:
+    return _jinja.from_string(guardrails_template()).render(**variables).strip()

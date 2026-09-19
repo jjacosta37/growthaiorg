@@ -29,9 +29,14 @@ REDDIT = {"subreddits": [{"name": "r/Bogleheads", "reason": "index investors"},
           "keywords": ["portfolio tracker", " asset allocation ", "portfolio tracker", ""]}
 
 
-def responder(fail=()):
+IDENTITY = {"product_name": "Acme Wealth", "industry_pack": "financial_services", "reason": "portfolio analytics"}
+
+
+def responder(fail=(), identity=None):
     def respond(params):
         title = schema_title(params)
+        if title == "ProjectIdentity":
+            return message(json.dumps(identity or IDENTITY))
         if title == "ProjectFacts":
             return message(json.dumps(FACTS))
         if title == "RedditSuggestions":
@@ -84,10 +89,13 @@ def test_full_onboarding(project, fake_anthropic, monkeypatch):
     docs = {d.kind: d for d in ContextDocument.objects.filter(project=project)}
     assert set(docs) == {"product", "audience", "brand_voice", "competitors", "content_strategy", "compliance"}
     assert docs["product"].source == "ai" and docs["product"].prompt_version == "v1"
-    assert docs["compliance"].source == "template" and "OpenWealth" in docs["compliance"].content_md
+    assert docs["compliance"].source == "template" and docs["compliance"].prompt_version == "pack:financial_services"
+    assert "Acme Wealth" in docs["compliance"].content_md and "No performance claims" in docs["compliance"].content_md
     assert docs["product"].revisions.count() == 1
 
     project.refresh_from_db()
+    assert project.name == "Acme Wealth"  # identified from the site
+    assert project.content_policy.pack == "financial_services" and project.content_policy.source == "suggested"
     assert project.onboarded_at is not None
     assert project.product_summary.startswith("OpenWealth is")
     assert project.competitors == [  # merged case-insensitively; bare domains get a scheme
@@ -98,11 +106,14 @@ def test_full_onboarding(project, fake_anthropic, monkeypatch):
     assert reddit == {"subreddits": ["Bogleheads", "personalfinance"],
                       "keywords": ["portfolio tracker", "asset allocation"]}
 
-    # LLM calls: 5 docs + facts + suggestions, all linked to the run.
-    assert LLMCall.objects.filter(agent_run=run).count() == 7
+    # LLM calls: identify + 5 docs + facts + suggestions, all linked to the run.
+    assert LLMCall.objects.filter(agent_run=run).count() == 8
 
     # The crawled site is in the cached prefix, identical across the five doc calls.
     doc_calls = [c for c in fake.messages.calls if schema_title(c) is None]
+    # Docs are written under the suggested pack's rules, with the identified name.
+    assert "`returns_claim`" in doc_calls[0]["system"][0]["text"]
+    assert "for Acme Wealth" in doc_calls[0]["system"][-1]["text"]
     site_blocks = {c["system"][1]["text"] for c in doc_calls}
     assert len(site_blocks) == 1 and "<page url=\"https://ow.example/p0\"" in site_blocks.pop()
     assert all(c["system"][1]["cache_control"] == {"type": "ephemeral"} for c in doc_calls)

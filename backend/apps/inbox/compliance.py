@@ -5,23 +5,35 @@ import logging
 import re
 
 import llm
+from apps.policy.service import policy_for
 
 from .content import as_text
 from .models import Draft
 
 log = logging.getLogger(__name__)
 
-DISCLOSURE = re.compile(r"\b(founder|co-?founder|i (built|made|work on|run))\b", re.I)
+COMMUNITY_KINDS = {"reddit_comment"}
+
+
+def has_disclosure(text: str, author_role: str) -> bool:
+    words = [re.escape(w) for w in author_role.lower().split() if len(w) > 2]
+    pattern = r"\b(disclosure|i (built|made|work on|run|work at)"
+    if words:
+        pattern += "|" + r"\s+".join(words)
+    pattern += r")\b"
+    return re.search(pattern, text, re.I) is not None
 
 
 def deterministic_flags(draft: Draft, text: str) -> list[dict]:
-    flags = []
+    """Checks that don't need a model: a community post that names the product must disclose affiliation."""
+    policy = policy_for(draft.project)
+    if draft.kind not in COMMUNITY_KINDS or not any(r["id"] == "missing_disclosure" for r in policy.rules):
+        return []
     name = draft.project.name
-    mentions = re.search(rf"\b{re.escape(name)}\b", text, re.I)
-    if draft.kind == "reddit_comment" and mentions and not DISCLOSURE.search(text):
-        flags.append({"rule": "missing_disclosure", "excerpt": name,
-                      "explanation": f"Mentions {name} without disclosing you're the founder."})
-    return flags
+    if re.search(rf"\b{re.escape(name)}\b", text, re.I) and not has_disclosure(text, policy.author_role):
+        return [{"rule": "missing_disclosure", "excerpt": name,
+                 "explanation": f"Mentions {name} without the disclosure: {policy.rendered_disclosure()}"}]
+    return []
 
 
 def lint(draft: Draft, run=None) -> list[dict]:

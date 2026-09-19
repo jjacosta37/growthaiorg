@@ -105,7 +105,7 @@ def test_regenerate_with_nudge(client, drafts, django_capture_on_commit_callback
     comment_call = next(c for c in fake.messages.calls[before:]
                         if "RedditComment" in json.dumps(c.get("output_config", {})))
     user = comment_call["messages"][0]["content"]
-    assert "<previous_draft>" in user and "Don't mention OpenWealth at all" in user and "5/25 rule" in user
+    assert "<previous_draft>" in user and "Don't mention Acme at all" in user and "5/25 rule" in user
 
     versions = client.get(f"/api/drafts/{draft.id}/").json()["versions"]
     assert [(v["source"], v["nudge"]) for v in versions] == [("ai_initial", ""), ("ai_regenerated", "no_mention")]

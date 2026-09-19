@@ -12,8 +12,10 @@ The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 |---|---|
 | `POST /api/auth/login/`, `/logout/`, `GET /api/auth/me/`, `GET /api/auth/csrf/` | Session auth |
 | `GET/PATCH /api/project/` | Project, including the editable competitors list |
+| `GET/PATCH /api/policy/` | Content rules, author role, disclosure and blog disclaimer (used in every LLM call and by the compliance check) |
+| `GET /api/policy/packs/`, `POST /api/policy/apply-pack/` `{pack}` | Industry policy packs (`backend/policies/*.yaml`) and switching to one |
 | `GET /api/status/` | Sidebar status line: active runs and the current step |
-| `POST /api/onboarding/start/` `{website_url, max_pages?}` | Crawl the site and write all context docs (returns a run) |
+| `POST /api/onboarding/start/` `{website_url, name?, max_pages?}` | Crawl the site and write all context docs (returns a run) |
 | `POST /api/context/recrawl/` `{overwrite_edited?, max_pages?}` | Re-crawl and rewrite docs, keeping hand-edited docs unless told otherwise |
 | `GET /api/context/docs/`, `GET/PATCH /api/context/docs/<kind>/` | Documents. PATCH saves your edit as a new revision |
 | `POST /api/context/docs/<kind>/regenerate/`, `GET .../revisions/` | Regenerate one doc; revision history |
@@ -81,6 +83,10 @@ cd backend && ../.venv/bin/pytest
 | `REDDIT_SOURCE` | `apify` (default) or `fake` for local testing without Apify spend |
 | `LLM_BATCH_POLL_SECONDS` | How often scheduled runs check their scoring batch (default 120) |
 | `CRAWL_MAX_PAGES`, `CRAWL_DELAY_SECONDS` | Onboarding crawl limits (default 40 pages, 0.2s between requests) |
+
+## Content policy (industry rules as data)
+
+Nothing industry-specific is hardcoded. Each project has a **content policy**: its rules, who posts (author role), the disclosure line, and an optional blog disclaimer. The policy is rendered into the guardrails of every LLM call, and the compliance check tests drafts against it. It starts from a **policy pack**, a YAML file in `backend/policies/`. Onboarding suggests a pack from the website, and you can switch packs or edit any rule. To support a new industry, add a YAML file (`extends: general`).
 
 ## How LLM calls work
 

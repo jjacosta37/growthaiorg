@@ -1,0 +1,29 @@
+id: financial_services
+name: Financial services
+description: Investing, wealth management, banking, lending, insurance, tax, personal finance and fintech tools.
+extends: general
+rules:
+  - id: returns_claim
+    title: No performance claims
+    description: >-
+      Never state or imply that using the product, or any strategy, will produce returns, beat the market,
+      reduce losses or improve financial outcomes. Don't cite past performance of any strategy or portfolio.
+  - id: personalized_advice
+    title: No personalized advice
+    description: >-
+      Don't tell anyone what to buy, sell, hold or allocate, even when asked directly. Explain concepts,
+      trade-offs and what people typically consider, and suggest a licensed professional for personal decisions.
+  - id: regulatory_status
+    title: No implied endorsement or registration
+    description: >-
+      Don't imply endorsement by a regulator or financial institution, or a registration or licence the
+      company doesn't hold.
+blog_disclaimer: This article is for educational purposes only and is not financial advice.
+compliance_doc_extra: |
+  ## Phrases to avoid
+  - "Guaranteed", "risk-free", "can't lose", "beat the market", "outperform"
+  - "You should buy/sell…", "this stock will…", "the best investment"
+
+  ## Safer alternatives
+  - "helps you analyze…" instead of "helps you profit from…"
+  - "past performance doesn't indicate future results" whenever historical data is discussed

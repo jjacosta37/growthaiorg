@@ -28,7 +28,7 @@ def reddit_responder(comment_body="Rebalancing once a year is common. Here's how
             score, worth = SCORES[marker]
             return message(json.dumps({"score": score, "reason": f"because {marker}", "reply_worthwhile": worth}))
         if title == "RedditComment":
-            return message(json.dumps({"body": comment_body, "mentions_product": "OpenWealth" in comment_body}))
+            return message(json.dumps({"body": comment_body, "mentions_product": "Acme" in comment_body}))
         if title == "ComplianceLint":
             return message(json.dumps({"flags": lint_flags or []}))
         raise AssertionError(f"unexpected request {title}")
@@ -38,6 +38,9 @@ def reddit_responder(comment_body="Rebalancing once a year is common. Here's how
 
 def configure(project=None, **overrides):
     project = project or Project.current()
+    if project.name == Project.DEFAULT_NAME:
+        project.name = "Acme"
+        project.save()
     cfg = AgentConfig.for_project(project, "reddit")
     cfg.config = {"subreddits": ["Bogleheads"], "keywords": ["rebalancing"], "relevance_threshold": 70,
                   **overrides}

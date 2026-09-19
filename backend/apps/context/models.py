@@ -38,7 +38,7 @@ class ContextDocument(models.Model):
     kind = models.CharField(max_length=30, choices=DocKind.choices)
     content_md = models.TextField(blank=True)
     source = models.CharField(max_length=20, choices=DocSource.choices, default=DocSource.AI)
-    prompt_version = models.CharField(max_length=20, blank=True)
+    prompt_version = models.CharField(max_length=60, blank=True)
     model = models.CharField(max_length=100, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -59,7 +59,7 @@ class ContextDocumentRevision(models.Model):
     document = models.ForeignKey(ContextDocument, on_delete=models.CASCADE, related_name="revisions")
     content_md = models.TextField()
     source = models.CharField(max_length=20, choices=DocSource.choices)
-    prompt_version = models.CharField(max_length=20, blank=True)
+    prompt_version = models.CharField(max_length=60, blank=True)
     model = models.CharField(max_length=100, blank=True)
     llm_call = models.ForeignKey("llm.LLMCall", on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -106,3 +106,10 @@ class BlogPostDraft(BaseModel):
     slug: str = Field(description="URL slug: lowercase words separated by hyphens.")
     target_keywords: list[str] = Field(description="Primary keyword first, then 2-4 secondary keywords.")
     body_md: str = Field(description="The full article in Markdown, starting at the first H2 (no H1).")
+
+
+@register
+class ProjectIdentity(BaseModel):
+    product_name: str = Field(description="The product or company name as the website presents it.")
+    industry_pack: str = Field(description="The id of the best-matching policy pack from the list given.")
+    reason: str = Field(description="One line: why that pack fits.")

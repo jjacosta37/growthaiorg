@@ -37,7 +37,7 @@ def test_project_get_and_patch_competitors(user):
     client = APIClient()
     client.force_authenticate(user)
     data = client.get("/api/project/").json()
-    assert data["name"] == "OpenWealth"
+    assert data["name"] == "My project"
 
     resp = client.patch(
         "/api/project/",

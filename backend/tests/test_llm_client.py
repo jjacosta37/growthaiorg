@@ -53,7 +53,7 @@ def test_context_block_is_first_and_cached(score_prompt, fake_anthropic):
     assert result.call.project == Project.current()
     system = fake.messages.calls[0]["system"]
     assert system[0]["cache_control"] == {"type": "ephemeral"}
-    assert "Hard rules" in system[0]["text"]
+    assert "# Content rules" in system[0]["text"] and "`fabrication`" in system[0]["text"]  # general pack
     assert '<document title="Product Information">' in system[0]["text"]
     assert system[1] == {"type": "text", "text": "Score things."}
 

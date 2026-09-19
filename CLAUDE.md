@@ -12,7 +12,7 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - Agents are deterministic Celery pipelines. No autonomous loops.
 - Tests mock every Anthropic and Apify call. Run with `docker compose run --rm web pytest` (or `pytest` in `backend/`).
 - Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
-- Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands.
+- Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands. The token names, components and screens are specified in `docs/design-brief.md` (the Claude Design brief); build against those names.
 
 # Sift — implementation plan
 

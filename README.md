@@ -1,1 +1,66 @@
-# growthaiorg
+# Sift
+
+An internal AI growth assistant for OpenWealth. Sift reads the website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
+
+The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
+
+**Status:** Phase 1 (backend), Milestone 1: skeleton, auth, and the `llm/` module.
+
+## Local development
+
+Requires Docker.
+
+```bash
+cp .env.example .env              # set ANTHROPIC_API_KEY, SIFT_ADMIN_USERNAME/PASSWORD
+docker compose up --build         # web :8000, worker, beat, postgres, redis
+```
+
+A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `web`, `worker` and `beat` start. `bootstrap` creates the admin user from `SIFT_ADMIN_*` and the default project. Then:
+
+- API docs (Swagger): http://localhost:8000/api/docs/. Log in first via http://localhost:8000/admin/.
+- Admin (LLM call log, batches, periodic tasks): http://localhost:8000/admin/
+- Real API smoke test: `docker compose exec web python manage.py llm_smoke`
+
+### Tests
+
+All Anthropic calls are replaced with a fake client, so tests never hit the network.
+
+```bash
+docker compose run --rm web pytest
+```
+
+To run outside Docker, use Python 3.13 and Postgres on localhost:5433 (`docker compose up -d postgres`):
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
+cd backend && ../.venv/bin/pytest
+```
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `DJANGO_SECRET_KEY` | Required in prod |
+| `DJANGO_DEBUG` | `true` for local dev |
+| `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated |
+| `DATABASE_URL` | Postgres URL |
+| `REDIS_URL` | Celery broker |
+| `SIFT_ADMIN_USERNAME`, `SIFT_ADMIN_PASSWORD`, `SIFT_ADMIN_EMAIL` | The single user, created by `bootstrap` |
+| `ANTHROPIC_API_KEY` | Claude API |
+| `LLM_MODEL_FAST`, `LLM_MODEL_WRITER` | Model IDs for cheap tasks and for writing |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith tracing of every LLM call |
+| `APIFY_TOKEN` | Reddit data (Milestone 3) |
+
+## How LLM calls work
+
+Everything goes through `backend/llm/`. Pipelines call `llm.complete("task.name", {...}, project=...)`.
+
+- Prompts are versioned files: `backend/prompts/<task>/vN.md`, with frontmatter for model tier, max_tokens, effort, output schema and tools.
+- Every call gets the guardrails and context documents as a cached system prefix.
+- Structured outputs are validated with Pydantic, with one retry.
+- Refusals and truncations are raised and logged, never parsed.
+- Every call writes an `LLMCall` row with token counts, cache hits and cost, and is traced to LangSmith when enabled.
+
+## Deploy
+
+Render Blueprint (`render.yaml`) arrives in Milestone 6.

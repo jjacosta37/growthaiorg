@@ -1,0 +1,62 @@
+# Local development. The frontend service is added in Phase 2.
+x-backend: &backend
+  build:
+    context: ./backend
+    args:
+      INSTALL_DEV: "true"
+  env_file: .env
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.dev
+    DATABASE_URL: postgres://sift:sift@postgres:5432/sift
+    REDIS_URL: redis://redis:6379/0
+  volumes:
+    - ./backend:/app
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_started
+
+services:
+  # One-shot: schema + admin user before anything else starts (beat needs its tables).
+  migrate:
+    <<: *backend
+    command: sh -c "python manage.py migrate && python manage.py bootstrap"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    <<: *backend
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+
+  worker:
+    <<: *backend
+    command: celery -A config worker --loglevel=info --concurrency=2
+
+  beat:
+    <<: *backend
+    command: celery -A config beat --loglevel=info
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: sift
+      POSTGRES_PASSWORD: sift
+      POSTGRES_DB: sift
+    ports:
+      - "5433:5432"  # host 5433 to avoid clashing with a local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sift"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+
+volumes:
+  pgdata:

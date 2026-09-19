@@ -1,0 +1,114 @@
+from pathlib import Path
+
+import environ
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+env = environ.Env()
+environ.Env.read_env(BASE_DIR.parent / ".env", overwrite=False)
+
+SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-change-me")
+DEBUG = env.bool("DJANGO_DEBUG", default=False)
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "drf_spectacular",
+    "django_celery_beat",
+    "llm",
+    "apps.core",
+]
+
+MIDDLEWARE = [
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+
+ROOT_URLCONF = "config.urls"
+WSGI_APPLICATION = "config.wsgi.application"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
+]
+
+DATABASES = {"default": env.db("DATABASE_URL", default="postgres://sift:sift@localhost:5433/sift")}
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LANGUAGE_CODE = "en-us"
+TIME_ZONE = "UTC"
+USE_I18N = False
+USE_TZ = True
+
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 50,
+}
+SPECTACULAR_SETTINGS = {"TITLE": "Sift API", "VERSION": "0.1.0"}
+
+# Celery
+CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_TIMEZONE = TIME_ZONE
+
+# LLM
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+LLM_MODELS = {
+    "fast": env("LLM_MODEL_FAST", default="claude-haiku-4-5-20251001"),
+    "writer": env("LLM_MODEL_WRITER", default="claude-sonnet-5"),
+}
+# USD per million tokens. Cache writes (5m TTL) bill at 1.25x input, cache reads at 0.1x.
+LLM_PRICING = {
+    "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
+    "claude-sonnet-5": {"input": 2.00, "output": 10.00},
+}
+LLM_CACHE_WRITE_MULTIPLIER = 1.25
+LLM_CACHE_READ_MULTIPLIER = 0.10
+LLM_BATCH_DISCOUNT = 0.50
+LLM_WEB_SEARCH_USD_PER_REQUEST = 0.01
+LLM_MAX_RETRIES = env.int("LLM_MAX_RETRIES", default=3)
+LLM_TIMEOUT_SECONDS = env.float("LLM_TIMEOUT_SECONDS", default=600.0)
+PROMPTS_DIR = BASE_DIR / "prompts"
+
+# LangSmith reads LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT from the environment.
+LANGSMITH_TRACING = env.bool("LANGSMITH_TRACING", default=False)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
+}

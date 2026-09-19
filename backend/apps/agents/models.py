@@ -29,7 +29,15 @@ class AgentConfig(models.Model):
 
     @classmethod
     def for_project(cls, project, agent_type: str) -> "AgentConfig":
-        obj, _ = cls.objects.get_or_create(project=project, agent_type=agent_type)
+        """Get or create, using the agent's registered default schedule for new configs."""
+        from .registry import get
+
+        try:
+            default_cron = get(agent_type).default_cron
+        except KeyError:
+            default_cron = cls._meta.get_field("cron").default
+        obj, _ = cls.objects.get_or_create(project=project, agent_type=agent_type,
+                                           defaults={"cron": default_cron})
         return obj
 
 

@@ -89,3 +89,12 @@ def test_run_now_conflict_and_skipped_list(client, fake_anthropic, monkeypatch, 
 def test_custom_validator_errors_return_400_not_500(client):
     resp = client.patch("/api/agents/x/", {"config": {"formats": ["dance"]}}, format="json")
     assert resp.status_code == 400 and "Unknown formats" in str(resp.json())
+
+
+def test_configs_created_anywhere_use_the_agents_default_schedule():
+    from apps.agents.models import AgentConfig
+
+    project = Project.current()
+    assert AgentConfig.for_project(project, "reddit").cron == "0 */4 * * *"  # e.g. created by onboarding
+    assert AgentConfig.for_project(project, "content").cron == "0 9 * * 1"
+    assert AgentConfig.for_project(project, "x").cron == "0 14 * * 1-5"

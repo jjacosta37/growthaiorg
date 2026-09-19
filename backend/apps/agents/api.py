@@ -28,10 +28,7 @@ def spec_or_404(agent_type: str):
 
 
 def agent_config(project, spec) -> AgentConfig:
-    config, created = AgentConfig.objects.get_or_create(
-        project=project, agent_type=spec.agent_type, defaults={"cron": spec.default_cron}
-    )
-    return config
+    return AgentConfig.for_project(project, spec.agent_type)
 
 
 def agent_summary(project, spec) -> dict:

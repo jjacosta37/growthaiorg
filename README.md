@@ -2,7 +2,7 @@
 
 An AI growth assistant for a company's marketing. Sift reads the company's website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
 
-The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
+**New here? Read [`docs/backend-guide.md`](docs/backend-guide.md)**, which covers the structure, data model and main flows with diagrams. Decisions and conventions are in [`CLAUDE.md`](CLAUDE.md).
 
 **Status:** Phase 1 (backend) is complete: skeleton and `llm/`, onboarding and context docs, inbox and Reddit Agent, Content Agent, X Agent, content policy, stats and deploy. Phase 2 (frontend) is next.
 

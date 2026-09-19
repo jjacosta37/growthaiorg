@@ -1,6 +1,8 @@
+from urllib.parse import urlencode
+
 from rest_framework import serializers
 
-from .content import X_CHAR_LIMIT, as_text
+from .content import as_text
 from .models import Draft, DraftVersion
 from .nudges import NUDGES
 
@@ -88,11 +90,16 @@ class DraftDetailSerializer(DraftListSerializer):
         if obj.kind == "reddit_comment" and obj.source_reddit_post:
             return obj.source_reddit_post.url
         if obj.kind in ("x_post", "x_thread"):
-            return "https://x.com/compose/post"
+            first = obj.current_version.content["posts"][0]
+            return f"https://x.com/intent/post?{urlencode({'text': first})}"
         return ""
 
     def get_char_limit(self, obj) -> int | None:
-        return X_CHAR_LIMIT if obj.kind in ("x_post", "x_thread") else None
+        if obj.kind not in ("x_post", "x_thread"):
+            return None
+        from apps.xagent.pipeline import load_config
+
+        return load_config(obj.project).char_limit
 
 
 class EditSerializer(serializers.Serializer):

@@ -113,3 +113,18 @@ class ProjectIdentity(BaseModel):
     product_name: str = Field(description="The product or company name as the website presents it.")
     industry_pack: str = Field(description="The id of the best-matching policy pack from the list given.")
     reason: str = Field(description="One line: why that pack fits.")
+
+
+# --- X Agent ----------------------------------------------------------------------------
+
+
+@register
+class XPostItem(BaseModel):
+    format: str = Field(description="The format id this item follows.")
+    angle: str = Field(description="One line: the specific idea or topic of this item.")
+    posts: list[str] = Field(description="One entry for a single post; several for a thread, in order.")
+
+
+@register
+class XPostBatch(BaseModel):
+    items: list[XPostItem]

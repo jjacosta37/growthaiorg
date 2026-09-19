@@ -2,17 +2,18 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-X_CHAR_LIMIT = 280
-
 
 class RedditCommentContent(BaseModel):
     body: str = Field(min_length=1)
 
 
 class XContent(BaseModel):
-    """A single post is a one-item list; a thread is several."""
+    """A single post is a one-item list; a thread is several. format/angle record how it was planned
+    (used to vary formats and avoid repeats)."""
 
     posts: list[str] = Field(min_length=1)
+    format: str = ""
+    angle: str = ""
 
     @field_validator("posts")
     @classmethod

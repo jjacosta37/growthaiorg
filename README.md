@@ -4,7 +4,7 @@ An AI growth assistant for a company's marketing. Sift reads the company's websi
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) 3 (inbox and Reddit Agent) and 4 (Content Agent) are done.
+**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) 3 (inbox and Reddit Agent), 4 (Content Agent) and 5 (X Agent) are done.
 
 ## API so far
 
@@ -32,6 +32,8 @@ The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 | `GET /api/agents/reddit/skipped/?run=&min_score=` | Scanned-but-skipped posts with scores, for tuning the threshold |
 | `GET /api/agents/content/topics/?status=`, `POST` `{title, angle?, target_keywords?, draft_now?}` | Blog topic backlog; request a specific topic (drafted right away by default) |
 | `POST /api/agents/content/topics/<id>/draft/`, `/reject/` | Draft a backlog topic now, or reject it so it isn't proposed again |
+
+The X Agent has no endpoints of its own: configure it with `PATCH /api/agents/x/` `{config: {posts_per_run, formats, max_thread_posts, char_limit, recent_window, guidance}}`, and its drafts appear in the inbox as `x_post` or `x_thread`. Their `open_url` opens X's compose page with the first post pre-filled.
 
 Only one context run (onboarding, recrawl or regenerate) can be active at a time; another request returns 409.
 

@@ -84,3 +84,8 @@ def test_run_now_conflict_and_skipped_list(client, fake_anthropic, monkeypatch, 
     AgentRun.objects.create(project=Project.current(), kind="reddit", status="running")
     assert client.post("/api/agents/reddit/run-now/").status_code == 409
 
+
+
+def test_custom_validator_errors_return_400_not_500(client):
+    resp = client.patch("/api/agents/x/", {"config": {"formats": ["dance"]}}, format="json")
+    assert resp.status_code == 400 and "Unknown formats" in str(resp.json())

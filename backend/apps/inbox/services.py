@@ -38,8 +38,10 @@ def create_draft(project, *, agent_type: str, kind: str, content: dict, result, 
 
 
 def edit(draft: Draft, content: dict) -> DraftVersion:
+    """Save a human edit. Partial content is merged onto the current version (e.g. edit just a title)."""
     _require_new(draft, "edit")
-    return add_version(draft, content, source=DraftVersion.Source.HUMAN_EDIT)
+    merged = {**draft.current_version.content, **content}
+    return add_version(draft, merged, source=DraftVersion.Source.HUMAN_EDIT)
 
 
 def mark_read(draft: Draft) -> None:

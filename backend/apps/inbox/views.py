@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from apps.agents.models import AgentRun
 from apps.agents.serializers import AgentRunSerializer
 from apps.agents.tasks import regenerate_draft_task
+from apps.core.errors import validation_errors
 from apps.core.models import Project
 
 from . import services
@@ -76,7 +77,7 @@ class EditView(_DraftAction):
         except services.DraftStateError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except PydanticValidationError as exc:
-            return Response({"content": exc.errors(include_url=False)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"content": validation_errors(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return self.detail(draft)
 
 

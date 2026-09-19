@@ -7,6 +7,7 @@ from rest_framework import generics, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.errors import validation_errors
 from apps.core.models import Project
 
 from . import registry
@@ -95,7 +96,7 @@ class AgentDetailView(APIView):
             try:
                 merged = spec.config_model.model_validate({**config.config, **v["config"]})
             except PydanticValidationError as exc:
-                return Response({"config": exc.errors(include_url=False)}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({"config": validation_errors(exc)}, status=status.HTTP_400_BAD_REQUEST)
             config.config = merged.model_dump()
         if "enabled" in v:
             config.enabled = v["enabled"]

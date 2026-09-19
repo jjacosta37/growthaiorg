@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.inbox",
     "apps.reddit",
     "apps.content",
+    "apps.xagent",
 ]
 
 MIDDLEWARE = [

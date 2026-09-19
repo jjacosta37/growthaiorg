@@ -1,5 +1,5 @@
-"""Topic de-duplication. The model is told what's covered, but it still repeats itself, so a
-cheap lexical check backs that up."""
+"""Text helpers shared by agents: slugs and a cheap lexical near-duplicate check. Models are told
+what already exists, but they still repeat themselves, so this backs that up."""
 
 import re
 

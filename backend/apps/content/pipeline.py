@@ -6,6 +6,7 @@ import llm
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.context.models import CrawledPage
+from apps.core.text import is_near_duplicate, slugify
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
 from apps.inbox.nudges import nudge_instruction
@@ -13,7 +14,6 @@ from apps.policy.service import policy_for
 
 from .config import ContentAgentConfig
 from .models import BlogTopic
-from .topics import is_near_duplicate, slugify
 
 META_LIMIT = 160
 

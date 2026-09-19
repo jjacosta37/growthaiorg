@@ -9,9 +9,9 @@ from apps.agents.runs import create_run
 from apps.agents.tasks import run_agent_task
 from apps.content.models import BlogTopic
 from apps.content.pipeline import finalize_post
-from apps.content.topics import is_near_duplicate, slugify
 from apps.context.models import CrawledPage
 from apps.core.models import Project
+from apps.core.text import is_near_duplicate, slugify
 from apps.inbox.models import Draft
 from llm.schemas import BlogPostDraft
 from tests.fakes import message, schema_title

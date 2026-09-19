@@ -4,7 +4,7 @@ An AI growth assistant for a company's marketing. Sift reads the company's websi
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) 3 (inbox and Reddit Agent), 4 (Content Agent) and 5 (X Agent) are done.
+**Status:** Phase 1 (backend) is complete: skeleton and `llm/`, onboarding and context docs, inbox and Reddit Agent, Content Agent, X Agent, content policy, stats and deploy. Phase 2 (frontend) is next.
 
 ## API so far
 
@@ -30,6 +30,8 @@ The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 | `GET /api/agents/`, `GET/PATCH /api/agents/<type>/` `{enabled?, cron?, config?}` | Agent status header and config (PATCH syncs the beat schedule) |
 | `POST /api/agents/<type>/run-now/`, `GET /api/agents/<type>/runs/` | Manual trigger and run history |
 | `GET /api/agents/reddit/skipped/?run=&min_score=` | Scanned-but-skipped posts with scores, for tuning the threshold |
+| `GET /api/stats/?weeks=8` | Weekly drafts per agent (generated, posted, dismissed), dismiss reasons, LLM and Apify spend, cache hit rate |
+| `GET /api/health/` | Public health check (app and database) |
 | `GET /api/agents/content/topics/?status=`, `POST` `{title, angle?, target_keywords?, draft_now?}` | Blog topic backlog; request a specific topic (drafted right away by default) |
 | `POST /api/agents/content/topics/<id>/draft/`, `/reject/` | Draft a backlog topic now, or reject it so it isn't proposed again |
 
@@ -100,6 +102,25 @@ Everything goes through `backend/llm/`. Pipelines call `llm.complete("task.name"
 - Refusals and truncations are raised and logged, never parsed.
 - Every call writes an `LLMCall` row with token counts, cache hits and cost, and is traced to LangSmith when enabled.
 
-## Deploy
+## Deploy (Render)
 
-Render Blueprint (`render.yaml`) arrives in Milestone 6.
+`render.yaml` is a Render Blueprint. It defines the web service (gunicorn), a Celery worker, Celery beat, managed Postgres and Key Value (Redis). It validates against Render's published schema. The frontend static site is added in Phase 2.
+
+1. Push the repo to GitHub, and merge the branch you want to deploy.
+2. In Render: **New → Blueprint**, then pick the repo and branch. Render prompts once for each secret on `sift-web`:
+   - `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, and optionally `LANGSMITH_API_KEY` (set `LANGSMITH_TRACING=true` in the `sift-shared` group to turn tracing on)
+   - `SIFT_ADMIN_USERNAME`, `SIFT_ADMIN_PASSWORD`, `SIFT_ADMIN_EMAIL`, for the single admin user
+
+   `sift-worker` and `sift-beat` read those same secrets from `sift-web`, and `DJANGO_SECRET_KEY` is generated.
+3. Every deploy runs `migrate` and `bootstrap` (idempotent) before the new version goes live. The health check is `/api/health/`.
+4. Verify:
+   - `https://<sift-web host>/api/health/` returns `{"ok": true}`
+   - you can log in at `/admin/`
+   - in the Render shell for `sift-web`, `python manage.py llm_smoke` makes one cheap real call
+5. Onboard with `POST /api/onboarding/start/`, then enable agents with `PATCH /api/agents/<type>/` `{"enabled": true}`. Beat picks up schedule changes without a restart.
+6. Once HTTPS is confirmed working, set `DJANGO_HSTS_SECONDS` (for example `31536000`) on `sift-web`. Don't set it before then: browsers cache HSTS.
+
+Notes:
+- **Plans:** the Blueprint uses small instance types (`0.5c-512mb` services, `0.1c-256mb` Postgres, `256mb` Key Value). Background workers and `preDeployCommand` need paid plans. See Render's pricing page for current costs.
+- **Beat:** run exactly **one** `sift-beat` instance, or scheduled runs fire twice.
+- **Redis:** Key Value uses `noeviction`, because it's the Celery broker and queued tasks must never be dropped.

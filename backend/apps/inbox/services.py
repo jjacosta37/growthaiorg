@@ -63,20 +63,23 @@ def mark_posted(draft: Draft, posted_url: str = "") -> None:
 def dismiss(draft: Draft, reason: str, note: str = "") -> None:
     _require_new(draft, "dismiss")
     draft.status = Draft.Status.DISMISSED
+    draft.dismissed_at = timezone.now()
     draft.dismiss_reason = reason
     draft.dismiss_note = note
-    draft.read_at = draft.read_at or timezone.now()
-    draft.save(update_fields=["status", "dismiss_reason", "dismiss_note", "read_at", "updated_at"])
+    draft.read_at = draft.read_at or draft.dismissed_at
+    draft.save(update_fields=["status", "dismissed_at", "dismiss_reason", "dismiss_note", "read_at", "updated_at"])
 
 
 def restore(draft: Draft) -> None:
     """Undo a dismiss or mark-posted (misclicks happen)."""
     draft.status = Draft.Status.NEW
+    draft.dismissed_at = None
     draft.dismiss_reason = ""
     draft.dismiss_note = ""
     draft.posted_at = None
     draft.posted_url = ""
-    draft.save(update_fields=["status", "dismiss_reason", "dismiss_note", "posted_at", "posted_url", "updated_at"])
+    draft.save(update_fields=["status", "dismissed_at", "dismiss_reason", "dismiss_note", "posted_at", "posted_url",
+                              "updated_at"])
 
 
 def _require_new(draft: Draft, action: str) -> None:

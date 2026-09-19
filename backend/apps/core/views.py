@@ -59,6 +59,21 @@ class ProjectView(generics.RetrieveUpdateAPIView):
         return Project.current()
 
 
+class HealthView(APIView):
+    """Unauthenticated liveness check for the load balancer: the app is up and the database answers."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    @extend_schema(responses={200: dict})
+    def get(self, request):
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        return Response({"ok": True})
+
+
 class StatusView(APIView):
     """Background activity for the sidebar status line. Polled by the frontend."""
 

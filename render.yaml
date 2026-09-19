@@ -1,0 +1,149 @@
+# Render Blueprint for Sift (backend). The frontend static site is added in Phase 2.
+# Deploy: Render Dashboard → New → Blueprint → pick this repo. You're prompted for every `sync: false` value.
+# Plans can be changed in the Dashboard later; preDeployCommand and background workers need paid plans.
+
+envVarGroups:
+  - name: sift-shared
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.prod
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: LLM_MODEL_FAST
+        value: claude-haiku-4-5-20251001
+      - key: LLM_MODEL_WRITER
+        value: claude-sonnet-5
+      - key: REDDIT_SOURCE
+        value: apify
+      - key: LANGSMITH_TRACING
+        value: "false"
+      - key: LANGSMITH_PROJECT
+        value: sift
+
+services:
+  - name: sift-web
+    type: web
+    runtime: python
+    rootDir: backend
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    preDeployCommand: python manage.py migrate --noinput && python manage.py bootstrap
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    healthCheckPath: /api/health/
+    envVars:
+      - fromGroup: sift-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sift-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sift-redis
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      # Secrets: prompted once here; the worker and beat read them from this service.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: SIFT_ADMIN_USERNAME
+        sync: false
+      - key: SIFT_ADMIN_PASSWORD
+        sync: false
+      - key: SIFT_ADMIN_EMAIL
+        sync: false
+
+  - name: sift-worker
+    type: worker
+    runtime: python
+    rootDir: backend
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A config worker --loglevel=info --concurrency=2
+    envVars:
+      - fromGroup: sift-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sift-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sift-redis
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: DJANGO_SECRET_KEY
+      - key: ANTHROPIC_API_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: ANTHROPIC_API_KEY
+      - key: APIFY_TOKEN
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: APIFY_TOKEN
+      - key: LANGSMITH_API_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: LANGSMITH_API_KEY
+
+  # Celery beat: fires scheduled agent runs from the DatabaseScheduler. Run exactly one instance.
+  - name: sift-beat
+    type: worker
+    runtime: python
+    rootDir: backend
+    plan: 0.5c-512mb
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A config beat --loglevel=info
+    envVars:
+      - fromGroup: sift-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sift-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sift-redis
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: DJANGO_SECRET_KEY
+      - key: ANTHROPIC_API_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: ANTHROPIC_API_KEY
+      - key: APIFY_TOKEN
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: APIFY_TOKEN
+      - key: LANGSMITH_API_KEY
+        fromService:
+          type: web
+          name: sift-web
+          envVarKey: LANGSMITH_API_KEY
+
+  - name: sift-redis
+    type: keyvalue
+    plan: 256mb
+    maxmemoryPolicy: noeviction  # it's a Celery broker: never drop queued tasks
+    ipAllowList: []  # internal connections only
+
+databases:
+  - name: sift-db
+    databaseName: sift
+    user: sift
+    plan: 0.1c-256mb

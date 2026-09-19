@@ -38,6 +38,7 @@ class Draft(models.Model):
     read_at = models.DateTimeField(null=True, blank=True)
     posted_at = models.DateTimeField(null=True, blank=True)
     posted_url = models.URLField(max_length=1000, blank=True)
+    dismissed_at = models.DateTimeField(null=True, blank=True)
     dismiss_reason = models.CharField(max_length=30, choices=DismissReason.choices, blank=True)
     dismiss_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)

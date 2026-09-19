@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "apps.reddit",
     "apps.content",
     "apps.xagent",
+    "apps.stats",
 ]
 
 MIDDLEWARE = [
@@ -80,7 +81,25 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 50,
 }
-SPECTACULAR_SETTINGS = {"TITLE": "Sift API", "VERSION": "0.1.0"}
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Sift API",
+    "VERSION": "0.1.0",
+    # Stable enum names for the generated frontend types (instead of Status393Enum and similar).
+    "ENUM_NAME_OVERRIDES": {
+        "DraftKindEnum": "apps.inbox.models.DraftKind",
+        "DraftStatusEnum": "apps.inbox.models.Draft.Status",
+        "DismissReasonEnum": "apps.inbox.models.Draft.DismissReason",
+        "DraftVersionSourceEnum": "apps.inbox.models.DraftVersion.Source",
+        "RunKindEnum": "apps.agents.models.AgentRun.Kind",
+        "RunStatusEnum": "apps.agents.models.AgentRun.Status",
+        "RunTriggerEnum": "apps.agents.models.AgentRun.Trigger",
+        "RunEventLevelEnum": "apps.agents.models.RunEvent.Level",
+        "DocKindEnum": "apps.context.models.DocKind",
+        "DocSourceEnum": "apps.context.models.DocSource",
+        "PolicySourceEnum": "apps.policy.models.ContentPolicy.Source",
+        "BlogTopicStatusEnum": "apps.content.models.BlogTopic.Status",
+    },
+}
 
 # Celery
 CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")

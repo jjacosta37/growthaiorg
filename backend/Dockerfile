@@ -10,4 +10,4 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then pip install -r requirements-dev.txt; el
 COPY . .
 RUN DJANGO_SETTINGS_MODULE=config.settings.dev python manage.py collectstatic --noinput
 
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+CMD ["sh", "-c", "gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]

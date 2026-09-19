@@ -57,7 +57,7 @@ def agent_summary(project, spec) -> dict:
 
 
 class AgentListView(APIView):
-    @extend_schema(responses={200: dict})
+    @extend_schema(operation_id="agents_list", responses={200: dict})
     def get(self, request):
         project = Project.current()
         return Response([agent_summary(project, spec) for spec in registry.all_agents()])

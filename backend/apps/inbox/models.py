@@ -30,6 +30,8 @@ class Draft(models.Model):
                                   related_name="drafts")
     source_reddit_post = models.ForeignKey("reddit.RedditPost", on_delete=models.SET_NULL, null=True, blank=True,
                                            related_name="drafts")
+    blog_topic = models.ForeignKey("content.BlogTopic", on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="drafts")
     current_version = models.ForeignKey("DraftVersion", on_delete=models.SET_NULL, null=True, blank=True,
                                         related_name="+")
     compliance_flags = models.JSONField(default=list, blank=True)  # [{rule, excerpt, explanation}]

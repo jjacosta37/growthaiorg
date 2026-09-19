@@ -30,9 +30,9 @@ def add_version(draft: Draft, content: dict, *, source: str, result=None, nudge:
 
 @transaction.atomic
 def create_draft(project, *, agent_type: str, kind: str, content: dict, result, run=None,
-                 source_reddit_post=None) -> Draft:
+                 source_reddit_post=None, blog_topic=None) -> Draft:
     draft = Draft.objects.create(project=project, agent_type=agent_type, kind=kind, agent_run=run,
-                                 source_reddit_post=source_reddit_post)
+                                 source_reddit_post=source_reddit_post, blog_topic=blog_topic)
     add_version(draft, content, source=DraftVersion.Source.AI_INITIAL, result=result)
     return draft
 

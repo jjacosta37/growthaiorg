@@ -81,3 +81,28 @@ class ComplianceFlag(BaseModel):
 @register
 class ComplianceLint(BaseModel):
     flags: list[ComplianceFlag]
+
+
+# --- Content Agent ----------------------------------------------------------------------
+
+
+class TopicProposal(BaseModel):
+    title: str = Field(description="Working title of the article.")
+    angle: str = Field(description="One or two sentences: the specific take and what the reader will learn.")
+    target_keywords: list[str] = Field(description="2-5 search keywords (hypotheses; no volumes).")
+    pillar: str = Field(description="Which Content Strategy pillar this belongs to.")
+    why: str = Field(description="One line: why this topic, now, for this audience.")
+
+
+@register
+class TopicProposals(BaseModel):
+    topics: list[TopicProposal]
+
+
+@register
+class BlogPostDraft(BaseModel):
+    title: str = Field(description="SEO title, ideally under 60 characters.")
+    meta_description: str = Field(description="Under 155 characters; a clear promise of what the reader learns.")
+    slug: str = Field(description="URL slug: lowercase words separated by hyphens.")
+    target_keywords: list[str] = Field(description="Primary keyword first, then 2-4 secondary keywords.")
+    body_md: str = Field(description="The full article in Markdown, starting at the first H2 (no H1).")

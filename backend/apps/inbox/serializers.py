@@ -58,18 +58,27 @@ class RedditSourceSerializer(serializers.Serializer):
     relevance_reason = serializers.CharField()
 
 
+class BlogTopicSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField()
+    angle = serializers.CharField()
+    target_keywords = serializers.ListField(child=serializers.CharField())
+    requested_by_user = serializers.BooleanField()
+
+
 class DraftDetailSerializer(DraftListSerializer):
     content = serializers.JSONField(source="current_version.content")
     copy_text = serializers.SerializerMethodField()
     open_url = serializers.SerializerMethodField()
     source_post = RedditSourceSerializer(source="source_reddit_post", default=None)
+    blog_topic = BlogTopicSummarySerializer(default=None)
     versions = DraftVersionSerializer(many=True)
     char_limit = serializers.SerializerMethodField()
 
     class Meta(DraftListSerializer.Meta):
         fields = [*DraftListSerializer.Meta.fields, "content", "copy_text", "open_url", "source_post",
-                  "compliance_flags", "versions", "char_limit", "posted_at", "posted_url", "dismiss_reason",
-                  "dismiss_note"]
+                  "blog_topic", "compliance_flags", "versions", "char_limit", "posted_at", "posted_url",
+                  "dismiss_reason", "dismiss_note"]
 
     def get_copy_text(self, obj) -> str:
         return as_text(obj.kind, obj.current_version.content)

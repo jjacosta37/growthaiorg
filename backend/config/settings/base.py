@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "apps.context",
     "apps.inbox",
     "apps.reddit",
+    "apps.content",
 ]
 
 MIDDLEWARE = [

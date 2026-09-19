@@ -4,7 +4,7 @@ An internal AI growth assistant for OpenWealth. Sift reads the website, writes c
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) and 3 (inbox and Reddit Agent) are done.
+**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`), 2 (onboarding and context docs) 3 (inbox and Reddit Agent) and 4 (Content Agent) are done.
 
 ## API so far
 
@@ -28,6 +28,8 @@ The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 | `GET /api/agents/`, `GET/PATCH /api/agents/<type>/` `{enabled?, cron?, config?}` | Agent status header and config (PATCH syncs the beat schedule) |
 | `POST /api/agents/<type>/run-now/`, `GET /api/agents/<type>/runs/` | Manual trigger and run history |
 | `GET /api/agents/reddit/skipped/?run=&min_score=` | Scanned-but-skipped posts with scores, for tuning the threshold |
+| `GET /api/agents/content/topics/?status=`, `POST` `{title, angle?, target_keywords?, draft_now?}` | Blog topic backlog; request a specific topic (drafted right away by default) |
+| `POST /api/agents/content/topics/<id>/draft/`, `/reject/` | Draft a backlog topic now, or reject it so it isn't proposed again |
 
 Only one context run (onboarding, recrawl or regenerate) can be active at a time; another request returns 409.
 

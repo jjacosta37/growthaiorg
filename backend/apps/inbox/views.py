@@ -25,7 +25,7 @@ from .serializers import (
 
 def drafts_qs():
     return (Draft.objects.filter(project=Project.current())
-            .select_related("current_version", "source_reddit_post", "project"))
+            .select_related("current_version", "source_reddit_post", "blog_topic", "project"))
 
 
 class DraftListView(generics.ListAPIView):

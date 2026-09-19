@@ -25,3 +25,28 @@ def get_schema(name: str) -> type[BaseModel]:
 class SmokeResult(BaseModel):
     ok: bool
     echo: str = Field(description="The word you were asked to echo back.")
+
+
+# --- Onboarding / context -------------------------------------------------------------
+
+
+class Competitor(BaseModel):
+    name: str
+    url: str = Field(description="Homepage URL, or an empty string if unknown.")
+
+
+@register
+class ProjectFacts(BaseModel):
+    product_summary: str = Field(description="Two sentences: what the product is and who it's for.")
+    competitors: list[Competitor]
+
+
+class SubredditSuggestion(BaseModel):
+    name: str = Field(description="Subreddit name without the r/ prefix.")
+    reason: str = Field(description="One line: why the target audience asks relevant questions there.")
+
+
+@register
+class RedditSuggestions(BaseModel):
+    subreddits: list[SubredditSuggestion]
+    keywords: list[str] = Field(description="Search phrases people use when asking about problems the product solves.")

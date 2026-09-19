@@ -10,8 +10,8 @@ def fake_anthropic():
 
     installed = []
 
-    def install(*responses):
-        fake = FakeAnthropic(*responses)
+    def install(*responses, responder=None):
+        fake = FakeAnthropic(*responses, responder=responder)
         llm_client.set_client(fake)
         installed.append(fake)
         return fake

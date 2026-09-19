@@ -123,3 +123,40 @@ def test_web_search_pause_turn_continues_and_uses_final_text(prompts_tmp, fake_a
     assert second["messages"][-1]["role"] == "assistant"
     call = LLMCall.objects.get()
     assert (call.input_tokens, call.output_tokens, call.web_search_requests) == (4000, 500, 3)
+
+
+def test_extra_cached_block_gets_the_breakpoint(score_prompt, fake_anthropic):
+    fake = fake_anthropic(message('{"ok": true, "echo": "x"}'))
+    llm.complete("t.score", {"word": "x"}, extra_cached="<page>site</page>")
+    system = fake.messages.calls[0]["system"]
+    assert "cache_control" not in system[0]  # guardrails: covered by the later breakpoint
+    assert system[1] == {"type": "text", "text": "<page>site</page>", "cache_control": {"type": "ephemeral"}}
+    assert system[2] == {"type": "text", "text": "Score things."}
+
+
+def test_no_guardrails_no_context_has_no_cached_block(prompts_tmp, fake_anthropic):
+    fm = "model_tier: fast\nschema: SmokeResult\ninclude_guardrails: false\ninclude_context: false"
+    write_prompt(prompts_tmp, "t.bare", "v1", fm, "Bare.", "Go")
+    fake = fake_anthropic(message('{"ok": true, "echo": "x"}'))
+    llm.complete("t.bare")
+    assert fake.messages.calls[0]["system"] == [{"type": "text", "text": "Bare."}]
+
+
+def test_auth_error_is_config_error_not_llm_error(score_prompt, fake_anthropic):
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    response = httpx2.Response(401, request=request)
+    fake_anthropic(anthropic.AuthenticationError("bad key", response=response, body=None))
+    with pytest.raises(llm.LLMConfigError):
+        llm.complete("t.score", {"word": "z"})
+    assert not issubclass(llm.LLMConfigError, llm.LLMError)
+    assert LLMCall.objects.get().status == "error"
+
+
+def test_missing_key_fails_before_any_call(score_prompt, settings):
+    from llm import client as llm_client
+
+    llm_client.set_client(None)
+    settings.ANTHROPIC_API_KEY = ""
+    with pytest.raises(llm.LLMConfigError, match="ANTHROPIC_API_KEY"):
+        llm.complete("t.score", {"word": "z"})
+    assert LLMCall.objects.count() == 0

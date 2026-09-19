@@ -11,6 +11,9 @@ class LLMBatch(models.Model):
         FAILED = "failed"
 
     project = models.ForeignKey("core.Project", on_delete=models.CASCADE, null=True, blank=True)
+    agent_run = models.ForeignKey(
+        "agents.AgentRun", on_delete=models.SET_NULL, null=True, blank=True, related_name="llm_batches"
+    )
     anthropic_batch_id = models.CharField(max_length=100, unique=True)
     task = models.CharField(max_length=100)
     prompt_version = models.CharField(max_length=20)
@@ -39,6 +42,9 @@ class LLMCall(models.Model):
         INVALID_OUTPUT = "invalid_output"
 
     project = models.ForeignKey("core.Project", on_delete=models.SET_NULL, null=True, blank=True)
+    agent_run = models.ForeignKey(
+        "agents.AgentRun", on_delete=models.SET_NULL, null=True, blank=True, related_name="llm_calls"
+    )
     task = models.CharField(max_length=100, db_index=True)
     model = models.CharField(max_length=100)
     prompt_version = models.CharField(max_length=20)

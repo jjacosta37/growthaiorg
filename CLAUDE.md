@@ -10,6 +10,7 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - External data goes through adapters in `backend/providers/`. Pipelines depend on the interface, not Apify.
 - Agents are deterministic Celery pipelines. No autonomous loops.
 - Tests mock every Anthropic and Apify call. Run with `docker compose run --rm web pytest` (or `pytest` in `backend/`).
+- Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
 - Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands.
 
 # Sift — implementation plan
@@ -31,7 +32,8 @@ Sift is an internal, single-user growth assistant for OpenWealth. It crawls the 
    - Web search uses `web_search_20260209` (Sonnet 5 supports it) with `max_uses` set. Server-tool errors arrive as result blocks, not exceptions, so the code checks for them.
    - Every response is checked for `stop_reason` of `refusal` or `max_tokens` before parsing. Either one is logged as a failed call.
    - LangSmith: `wrap_anthropic(client)` traces sync calls. The wrapper can't see batch submit and collect, so those are wrapped in `@traceable` spans that record each result's usage.
-6. **Compliance lint (one small addition; I'll drop it if you don't want it):** after generation, a cheap Haiku call checks the draft against the hard rules. It returns `{flags: [{rule, excerpt}]}`, shown as a warning in the detail pane. It never blocks a draft.
+6. **JavaScript-rendered pages (decided during M2):** our crawler reads server HTML and decodes Next.js's embedded content. Pages that are still thin go to `ApifyRenderer` (Apify Website Content Crawler with a real browser), behind the `PageRenderer` interface in `providers/crawl/render.py`. Apify spend is logged in `ExternalUsage`. getopenwealth.com's homepage, pricing and legal pages need this.
+7. **Compliance lint (one small addition; I'll drop it if you don't want it):** after generation, a cheap Haiku call checks the draft against the hard rules. It returns `{flags: [{rule, excerpt}]}`, shown as a warning in the detail pane. It never blocks a draft.
 
 ## Project structure
 ```
@@ -97,6 +99,8 @@ Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent
 "Copy & open" writes to the clipboard, calls `window.open`, and records a pending item ID. On `visibilitychange` back to the tab, it shows "Did you post it?". Shortcuts: j/k/c/e/r/d, shown as hints. Markdown editing uses a textarea with a react-markdown preview. Competitors and subreddits use chip inputs. Styling is only `tokens.css` (color, type, spacing, radius, light/dark), with no visual polish yet.
 
 ## Milestones (each ends runnable)
+**Progress:** M1 ✅, M2 ✅. Next: M3.
+
 **Phase 1: backend only.** Each milestone is exercised through the DRF API, the browsable API or admin, and pytest. docker-compose leaves out the frontend service until Phase 2.
 1. **Skeleton:** Django, DRF, Celery, beat, Postgres, Redis in docker-compose; session auth endpoints; `llm/` with prompt loader, `complete()`, cost logging, LangSmith; `.env.example`; README. Tests: prompt loader, cost calculation, structured parse and retry, refusal handling (SDK mocked).
 2. **Onboarding + context API:** crawler, doc generation with web search, RunEvent progress, regenerate and re-crawl endpoints. Tests: sitemap parsing, page limit and host filter, extraction, pipeline with mocked LLM.

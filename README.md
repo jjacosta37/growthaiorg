@@ -4,7 +4,23 @@ An internal AI growth assistant for OpenWealth. Sift reads the website, writes c
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend), Milestone 1: skeleton, auth, and the `llm/` module.
+**Status:** Phase 1 (backend). Milestones 1 (skeleton, auth, `llm/`) and 2 (onboarding and context docs) are done.
+
+## API so far
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/auth/login/`, `/logout/`, `GET /api/auth/me/`, `GET /api/auth/csrf/` | Session auth |
+| `GET/PATCH /api/project/` | Project, including the editable competitors list |
+| `GET /api/status/` | Sidebar status line: active runs and the current step |
+| `POST /api/onboarding/start/` `{website_url, max_pages?}` | Crawl the site and write all context docs (returns a run) |
+| `POST /api/context/recrawl/` `{overwrite_edited?, max_pages?}` | Re-crawl and rewrite docs, keeping hand-edited docs unless told otherwise |
+| `GET /api/context/docs/`, `GET/PATCH /api/context/docs/<kind>/` | Documents. PATCH saves your edit as a new revision |
+| `POST /api/context/docs/<kind>/regenerate/`, `GET .../revisions/` | Regenerate one doc; revision history |
+| `GET /api/context/pages/` | Crawled pages |
+| `GET /api/runs/?kind=`, `/api/runs/<id>/`, `/api/runs/<id>/events/?after=<id>` | Run history and incremental progress events |
+
+Only one context run (onboarding, recrawl or regenerate) can be active at a time; another request returns 409.
 
 ## Local development
 
@@ -49,7 +65,9 @@ cd backend && ../.venv/bin/pytest
 | `ANTHROPIC_API_KEY` | Claude API |
 | `LLM_MODEL_FAST`, `LLM_MODEL_WRITER` | Model IDs for cheap tasks and for writing |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith tracing of every LLM call |
-| `APIFY_TOKEN` | Reddit data (Milestone 3) |
+| `APIFY_TOKEN` | Renders JavaScript-only pages during onboarding; Reddit data (Milestone 3) |
+| `APIFY_RENDER_ACTOR` | Browser renderer actor (default `apify/website-content-crawler`) |
+| `CRAWL_MAX_PAGES`, `CRAWL_DELAY_SECONDS` | Onboarding crawl limits (default 40 pages, 0.2s between requests) |
 
 ## How LLM calls work
 

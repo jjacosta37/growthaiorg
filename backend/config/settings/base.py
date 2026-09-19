@@ -24,6 +24,8 @@ INSTALLED_APPS = [
     "django_celery_beat",
     "llm",
     "apps.core",
+    "apps.agents",
+    "apps.context",
 ]
 
 MIDDLEWARE = [
@@ -111,4 +113,19 @@ LOGGING = {
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
+    "loggers": {
+        "trafilatura": {"level": "ERROR"},  # warns "discarding data" for every thin page
+        "httpx": {"level": "WARNING"},
+    },
 }
+
+# Onboarding crawl
+CRAWL_MAX_PAGES = env.int("CRAWL_MAX_PAGES", default=40)
+CRAWL_DELAY_SECONDS = env.float("CRAWL_DELAY_SECONDS", default=0.2)
+CONTEXT_PAGE_CHAR_LIMIT = 15_000  # per crawled page, when sent to the model
+CONTEXT_SITE_CHAR_BUDGET = 240_000  # all pages together (~60k tokens); overflow is reported, not silent
+CONTEXT_MIN_PAGES_WARNING = 3
+
+# Apify: renders JavaScript-only pages during onboarding (and fetches Reddit from Milestone 3)
+APIFY_TOKEN = env("APIFY_TOKEN", default="")
+APIFY_RENDER_ACTOR = env("APIFY_RENDER_ACTOR", default="apify/website-content-crawler")

@@ -23,11 +23,11 @@ def context_documents(project) -> list[tuple[str, str]]:
     return _context_provider(project)
 
 
-def render_context_block(project) -> str:
+def render_context_block(project, *, include_guardrails: bool = True, include_docs: bool = True) -> str:
     from .prompts import guardrails_text
 
-    parts = [guardrails_text()]
-    docs = context_documents(project)
+    parts = [guardrails_text()] if include_guardrails else []
+    docs = context_documents(project) if include_docs else []
     if docs:
         parts.append("# Context documents\n\nWhat we know about the product. Treat these as ground truth.")
         for title, body in docs:
@@ -35,12 +35,27 @@ def render_context_block(project) -> str:
     return "\n\n".join(parts)
 
 
-def build_system(project, task_system: str, include_context: bool) -> list[dict]:
-    blocks: list[dict] = []
-    if include_context:
-        blocks.append(
-            {"type": "text", "text": render_context_block(project), "cache_control": {"type": "ephemeral"}}
-        )
+def build_system(
+    project,
+    task_system: str,
+    *,
+    include_guardrails: bool = True,
+    include_context: bool = True,
+    extra_cached: str | None = None,
+) -> list[dict]:
+    """[guardrails + context docs] [extra_cached] [task instructions].
+
+    The cache breakpoint goes on the last stable block. `extra_cached` holds large inputs that
+    several calls in a row share (e.g. crawled pages during onboarding), so they're cached too.
+    """
+    stable: list[dict] = []
+    shared = render_context_block(project, include_guardrails=include_guardrails, include_docs=include_context)
+    if shared:
+        stable.append({"type": "text", "text": shared})
+    if extra_cached:
+        stable.append({"type": "text", "text": extra_cached})
+    if stable:
+        stable[-1]["cache_control"] = {"type": "ephemeral"}
     if task_system:
-        blocks.append({"type": "text", "text": task_system})
-    return blocks
+        stable.append({"type": "text", "text": task_system})
+    return stable

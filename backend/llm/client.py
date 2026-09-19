@@ -11,7 +11,7 @@ from django.conf import settings
 from pydantic import BaseModel, ValidationError
 
 from .context import build_system
-from .errors import LLMError, LLMOutputInvalid, LLMRefused, LLMTruncated
+from .errors import LLMConfigError, LLMError, LLMOutputInvalid, LLMRefused, LLMTruncated
 from .models import LLMCall
 from .pricing import compute_cost
 from .prompts import PromptSpec, load_prompt
@@ -29,6 +29,8 @@ _client = None
 def get_client():
     global _client
     if _client is None:
+        if not settings.ANTHROPIC_API_KEY:
+            raise LLMConfigError("ANTHROPIC_API_KEY is not set")
         raw = anthropic.Anthropic(
             api_key=settings.ANTHROPIC_API_KEY or None,
             max_retries=settings.LLM_MAX_RETRIES,
@@ -65,13 +67,19 @@ def output_schema(spec: PromptSpec) -> type[BaseModel] | None:
     return get_schema(spec.schema) if spec.schema else None
 
 
-def build_params(spec: PromptSpec, variables: dict, project) -> dict[str, Any]:
+def build_params(spec: PromptSpec, variables: dict, project, extra_cached: str | None = None) -> dict[str, Any]:
     """Request params for messages.create. Shared by the sync and batch paths."""
     system_text, user_text = spec.render(variables)
     params: dict[str, Any] = {
         "model": model_for(spec),
         "max_tokens": spec.max_tokens,
-        "system": build_system(project, system_text, spec.include_context),
+        "system": build_system(
+            project,
+            system_text,
+            include_guardrails=spec.include_guardrails,
+            include_context=spec.include_context,
+            extra_cached=extra_cached,
+        ),
         "messages": [{"role": "user", "content": user_text}],
     }
     output_config: dict[str, Any] = {}
@@ -122,9 +130,14 @@ def complete(
     variables: dict | None = None,
     *,
     project=None,
+    run=None,
     version: str | None = None,
+    extra_cached: str | None = None,
 ) -> LLMResult:
     """Run one prompt task and return validated output.
+
+    `run` links the LLMCall to an AgentRun. `extra_cached` is large shared input placed in the
+    cached system prefix (after guardrails/context docs, before task instructions).
 
     Raises LLMRefused / LLMTruncated / LLMOutputInvalid / LLMError. A failed call is still
     logged as an LLMCall row, attached to the exception as `.call`.
@@ -137,7 +150,7 @@ def complete(
     for attempt in range(2):  # one extra attempt only for schema-invalid output
         try:
             return _traced_attempt(
-                spec, variables, project, schema,
+                spec, variables, project, schema, run, extra_cached,
                 langsmith_extra={"name": task, "metadata": {"prompt_version": spec.version, "attempt": attempt}},
             )
         except LLMOutputInvalid as exc:
@@ -151,16 +164,17 @@ def _trace_inputs(inputs: dict) -> dict:
 
 
 @traceable(run_type="chain", process_inputs=_trace_inputs)
-def _traced_attempt(spec, variables, project, schema) -> LLMResult:
-    return _attempt(spec, variables, project, schema)
+def _traced_attempt(spec, variables, project, schema, run, extra_cached) -> LLMResult:
+    return _attempt(spec, variables, project, schema, run, extra_cached)
 
 
-def _attempt(spec: PromptSpec, variables: dict, project, schema) -> LLMResult:
+def _attempt(spec: PromptSpec, variables: dict, project, schema, run, extra_cached) -> LLMResult:
     client = get_client()
-    params = build_params(spec, variables, project)
+    params = build_params(spec, variables, project, extra_cached)
     usage = _Usage()
     call = LLMCall(
         project=project,
+        agent_run=run,
         task=spec.task,
         model=params["model"],
         prompt_version=spec.version,
@@ -178,7 +192,10 @@ def _attempt(spec: PromptSpec, variables: dict, project, schema) -> LLMResult:
             params["messages"] = [*params["messages"], {"role": "assistant", "content": response.content}]
             response = client.messages.create(**params)
             usage.add(response.usage)
-    except anthropic.APIError as exc:
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.CredentialsError) as exc:
+        _finish(call, usage, started, LLMCall.Status.ERROR, error=f"{type(exc).__name__}: {exc}")
+        raise LLMConfigError(f"Anthropic rejected the credentials: {exc}") from exc
+    except anthropic.AnthropicError as exc:
         _finish(call, usage, started, LLMCall.Status.ERROR, error=f"{type(exc).__name__}: {exc}")
         raise LLMError(f"{spec.task}: API error: {exc}", call=call) from exc
 

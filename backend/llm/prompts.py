@@ -9,7 +9,8 @@ Each file is YAML frontmatter followed by two Jinja sections:
     effort: medium            # optional; omit for Haiku (it rejects effort)
     schema: RelevanceScore    # optional; name registered in llm.schemas
     tools: [web_search]       # optional
-    include_context: true     # prepend guardrails + context docs (default true)
+    include_guardrails: true  # prepend the hard content rules (default true)
+    include_context: true     # prepend the project's context docs (default true)
     ---
     === system ===
     Task instructions...
@@ -56,6 +57,7 @@ class PromptSpec:
     effort: str | None = None
     schema: str | None = None
     tools: tuple[str, ...] = field(default_factory=tuple)
+    include_guardrails: bool = True
     include_context: bool = True
     web_search_max_uses: int = 5
 
@@ -125,6 +127,7 @@ def _parse(task: str, version: str, raw: str) -> PromptSpec:
         effort=meta.get("effort"),
         schema=meta.get("schema"),
         tools=tools,
+        include_guardrails=bool(meta.get("include_guardrails", True)),
         include_context=bool(meta.get("include_context", True)),
         web_search_max_uses=int(meta.get("web_search_max_uses", 5)),
         system_template=sections.get("system", "").strip(),

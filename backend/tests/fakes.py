@@ -29,23 +29,38 @@ def message(content, stop_reason="end_turn", usage_=None, stop_details=None):
     )
 
 
+def task_system(params) -> str:
+    """The task-instructions block (last system block) of a request."""
+    return params["system"][-1]["text"] if params.get("system") else ""
+
+
+def schema_title(params) -> str | None:
+    fmt = (params.get("output_config") or {}).get("format")
+    return fmt["schema"].get("title") if fmt else None
+
+
 class FakeMessages:
-    def __init__(self, responses):
+    def __init__(self, responses, responder=None):
         self._responses = list(responses)
+        self._responder = responder
         self.calls: list[dict] = []
 
     def create(self, **params):
         self.calls.append(params)
-        if not self._responses:
+        if self._responder is not None:
+            r = self._responder(params)
+        elif self._responses:
+            r = self._responses.pop(0)
+        else:
             raise AssertionError("FakeAnthropic: no more queued responses")
-        r = self._responses.pop(0)
         if isinstance(r, Exception):
             raise r
         return r
 
 
 class FakeAnthropic:
-    """Queue responses (messages or exceptions); inspect `.messages.calls` afterwards."""
+    """Either queue responses (messages or exceptions) in order, or pass `responder(params)`
+    to answer based on the request. Inspect `.messages.calls` afterwards."""
 
-    def __init__(self, *responses):
-        self.messages = FakeMessages(responses)
+    def __init__(self, *responses, responder=None):
+        self.messages = FakeMessages(responses, responder)

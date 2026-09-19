@@ -3,7 +3,7 @@
 Kept import-light so `import llm` works before Django's app registry is ready.
 """
 
-from .errors import LLMError, LLMOutputInvalid, LLMRefused, LLMTruncated
+from .errors import LLMConfigError, LLMError, LLMOutputInvalid, LLMRefused, LLMTruncated
 
 
 def complete(task, variables=None, **kwargs):
@@ -12,4 +12,4 @@ def complete(task, variables=None, **kwargs):
     return _complete(task, variables, **kwargs)
 
 
-__all__ = ["complete", "LLMError", "LLMOutputInvalid", "LLMRefused", "LLMTruncated"]
+__all__ = ["complete", "LLMConfigError", "LLMError", "LLMOutputInvalid", "LLMRefused", "LLMTruncated"]

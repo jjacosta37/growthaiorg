@@ -2,7 +2,7 @@ import httpx
 
 from providers.crawl.crawler import Crawler
 
-BODY = "<p>" + ("OpenWealth helps self-directed investors understand their portfolios. " * 8) + "</p>"
+BODY = "<p>" + ("Acme helps small teams plan projects and hit their deadlines. " * 8) + "</p>"
 
 
 def page(title, extra=""):
@@ -29,67 +29,67 @@ XML = "application/xml"
 
 def test_sitemap_index_crawl_respects_robots_limit_and_skips():
     routes = {
-        "https://ow.example/robots.txt": (200, "text/plain",
-                                          "User-agent: *\nDisallow: /private\nSitemap: https://ow.example/idx.xml"),
-        "https://ow.example/idx.xml": (200, XML, """<sitemapindex>
-            <sitemap><loc>https://ow.example/pages.xml</loc></sitemap></sitemapindex>"""),
-        "https://ow.example/pages.xml": (200, XML, """<urlset>
-            <url><loc>https://ow.example/</loc></url>
-            <url><loc>https://ow.example/pricing</loc></url>
-            <url><loc>https://ow.example/private/admin</loc></url>
-            <url><loc>https://ow.example/empty</loc></url>
-            <url><loc>https://ow.example/features/deep/page</loc></url>
-            <url><loc>https://ow.example/broken</loc></url></urlset>"""),
-        "https://ow.example/": (200, HTML, page("Home")),
-        "https://ow.example/pricing": (200, HTML, page("Pricing")),
-        "https://ow.example/empty": (200, HTML, "<html><body><div id=root></div></body></html>"),
-        "https://ow.example/features/deep/page": (200, HTML, page("Deep")),
+        "https://acme.example/robots.txt": (200, "text/plain",
+                                          "User-agent: *\nDisallow: /private\nSitemap: https://acme.example/idx.xml"),
+        "https://acme.example/idx.xml": (200, XML, """<sitemapindex>
+            <sitemap><loc>https://acme.example/pages.xml</loc></sitemap></sitemapindex>"""),
+        "https://acme.example/pages.xml": (200, XML, """<urlset>
+            <url><loc>https://acme.example/</loc></url>
+            <url><loc>https://acme.example/pricing</loc></url>
+            <url><loc>https://acme.example/private/admin</loc></url>
+            <url><loc>https://acme.example/empty</loc></url>
+            <url><loc>https://acme.example/features/deep/page</loc></url>
+            <url><loc>https://acme.example/broken</loc></url></urlset>"""),
+        "https://acme.example/": (200, HTML, page("Home")),
+        "https://acme.example/pricing": (200, HTML, page("Pricing")),
+        "https://acme.example/empty": (200, HTML, "<html><body><div id=root></div></body></html>"),
+        "https://acme.example/features/deep/page": (200, HTML, page("Deep")),
     }
     crawler, requested = make_crawler(routes)
     progress = []
 
-    result = crawler.crawl("https://ow.example", max_pages=5, progress=progress.append)
+    result = crawler.crawl("https://acme.example", max_pages=5, progress=progress.append)
 
     assert result.discovery == "sitemap"
     assert result.discovered == 6
     assert [p.title for p in result.pages] == ["Home", "Pricing"]
     reasons = dict(result.skipped)
-    assert reasons["https://ow.example/private/admin"] == "robots.txt"
-    assert reasons["https://ow.example/empty"] == "too little text"
-    assert reasons["https://ow.example/broken"] == "HTTP 404"
-    assert "https://ow.example/private/admin" not in requested  # never fetched
-    assert "https://ow.example/features/deep/page" not in requested  # deepest page cut by max_pages=5
+    assert reasons["https://acme.example/private/admin"] == "robots.txt"
+    assert reasons["https://acme.example/empty"] == "too little text"
+    assert reasons["https://acme.example/broken"] == "HTTP 404"
+    assert "https://acme.example/private/admin" not in requested  # never fetched
+    assert "https://acme.example/features/deep/page" not in requested  # deepest page cut by max_pages=5
     assert any("Found 6 pages" in m for m in progress)
 
 
 def test_falls_back_to_links_without_sitemap():
     home = page("Home", '<a href="/about">About</a> <a href="/app.js">js</a> <a href="https://other.example/">o</a>')
     routes = {
-        "https://ow.example/": (200, HTML, home),
-        "https://ow.example/about": (200, HTML, page("About", '<a href="/">home</a> <a href="/team">t</a>')),
-        "https://ow.example/team": (200, HTML, page("Team")),
+        "https://acme.example/": (200, HTML, home),
+        "https://acme.example/about": (200, HTML, page("About", '<a href="/">home</a> <a href="/team">t</a>')),
+        "https://acme.example/team": (200, HTML, page("Team")),
     }
     crawler, requested = make_crawler(routes)
 
-    result = crawler.crawl("https://ow.example/", max_pages=2)
+    result = crawler.crawl("https://acme.example/", max_pages=2)
 
     assert result.discovery == "links"
     assert [p.title for p in result.pages] == ["Home", "About"]
     assert not any("other.example" in u or u.endswith(".js") for u in requested)
-    assert "https://ow.example/team" not in requested  # page budget reached
+    assert "https://acme.example/team" not in requested  # page budget reached
 
 
 def test_non_html_is_skipped():
     routes = {
-        "https://ow.example/sitemap.xml": (200, XML,
-                                           "<urlset><url><loc>https://ow.example/report</loc></url></urlset>"),
-        "https://ow.example/": (200, HTML, page("Home")),
-        "https://ow.example/report": (200, "application/pdf", "%PDF"),
+        "https://acme.example/sitemap.xml": (200, XML,
+                                           "<urlset><url><loc>https://acme.example/report</loc></url></urlset>"),
+        "https://acme.example/": (200, HTML, page("Home")),
+        "https://acme.example/report": (200, "application/pdf", "%PDF"),
     }
     crawler, _ = make_crawler(routes)
-    result = crawler.crawl("https://ow.example", max_pages=10)
+    result = crawler.crawl("https://acme.example", max_pages=10)
     assert [p.title for p in result.pages] == ["Home"]
-    assert ("https://ow.example/report", "not HTML") in result.skipped
+    assert ("https://acme.example/report", "not HTML") in result.skipped
 
 
 SPA = ('<html><head><title>Pricing | OW</title><meta name="description" content="One plan, everything included.">'
@@ -115,16 +115,16 @@ class FakeRenderer:
 
 def _spa_routes():
     return {
-        "https://ow.example/sitemap.xml": (200, XML, """<urlset><url><loc>https://ow.example/</loc></url>
-            <url><loc>https://ow.example/pricing</loc></url></urlset>"""),
-        "https://ow.example/": (200, HTML, page("Home")),
-        "https://ow.example/pricing": (200, HTML, SPA),
+        "https://acme.example/sitemap.xml": (200, XML, """<urlset><url><loc>https://acme.example/</loc></url>
+            <url><loc>https://acme.example/pricing</loc></url></urlset>"""),
+        "https://acme.example/": (200, HTML, page("Home")),
+        "https://acme.example/pricing": (200, HTML, SPA),
     }
 
 
 def test_thin_pages_keep_meta_without_renderer():
     crawler, _ = make_crawler(_spa_routes())
-    result = crawler.crawl("https://ow.example", max_pages=10)
+    result = crawler.crawl("https://acme.example", max_pages=10)
     pricing = next(p for p in result.pages if p.url.endswith("/pricing"))
     assert pricing.thin and "One plan, everything included." in pricing.text
     assert result.render is None
@@ -132,9 +132,9 @@ def test_thin_pages_keep_meta_without_renderer():
 
 def test_thin_pages_are_rendered():
     crawler, _ = make_crawler(_spa_routes())
-    renderer = FakeRenderer({"https://ow.example/pricing": "Pricing. One plan at $9/month. " * 20})
-    result = crawler.crawl("https://ow.example", max_pages=10, renderer=renderer)
-    assert renderer.requested == ["https://ow.example/pricing"]  # only the thin page
+    renderer = FakeRenderer({"https://acme.example/pricing": "Pricing. One plan at $9/month. " * 20})
+    result = crawler.crawl("https://acme.example", max_pages=10, renderer=renderer)
+    assert renderer.requested == ["https://acme.example/pricing"]  # only the thin page
     pricing = next(p for p in result.pages if p.url.endswith("/pricing"))
     assert pricing.rendered and not pricing.thin and "$9/month" in pricing.text  # matched despite trailing slash
     assert result.thin_pages == []

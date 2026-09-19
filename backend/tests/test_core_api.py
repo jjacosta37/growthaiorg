@@ -41,8 +41,8 @@ def test_project_get_and_patch_competitors(user):
 
     resp = client.patch(
         "/api/project/",
-        {"website_url": "https://openwealth.example", "competitors": [{"name": "Acme", "url": "https://acme.example"}]},
+        {"website_url": "https://acme.example", "competitors": [{"name": "Globex", "url": "https://globex.example"}]},
         format="json",
     )
     assert resp.status_code == 200, resp.json()
-    assert resp.json()["competitors"] == [{"name": "Acme", "url": "https://acme.example"}]
+    assert resp.json()["competitors"] == [{"name": "Globex", "url": "https://globex.example"}]

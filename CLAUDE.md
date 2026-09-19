@@ -3,11 +3,11 @@
 Working agreement for this repo. The approved plan follows below; keep it up to date as milestones land.
 
 ## Conventions
-- **Platform, not bespoke.** Sift may become a product. OpenWealth is just one customer and uses the app like any other. Never put customer-specific or industry-specific logic in code or prompts. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
+- **Platform, not bespoke.** Sift is built as a product for any company. Never put customer-specific or industry-specific logic, names or examples in code, prompts, tests or docs. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts and code. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
 - Stack is fixed: Django + DRF + Postgres, Celery + beat + Redis, Vite React TS, `anthropic` SDK. No LangChain/LangGraph/Agent SDK.
 - **Only `backend/llm/` imports `anthropic`.** Pipelines call `llm.complete(...)` / `llm.batch.*`.
 - Model IDs come from `settings.LLM_MODELS` (`fast` = `claude-haiku-4-5-20251001`, `writer` = `claude-sonnet-5`). Never hardcode.
-- Prompts live in `backend/prompts/<task>/vN.md` (YAML frontmatter + Jinja body). Never inline prompt strings. Bump the version instead of editing a prompt that has produced drafts.
+- Prompts live in `backend/prompts/<task>/vN.md` (YAML frontmatter + Jinja body). Never inline prompt strings. Bump the version instead of editing a prompt that has produced drafts. Superseded versions are deleted once no pending batch uses them (git keeps the history).
 - External data goes through adapters in `backend/providers/`. Pipelines depend on the interface, not Apify.
 - Agents are deterministic Celery pipelines. No autonomous loops.
 - Tests mock every Anthropic and Apify call. Run with `docker compose run --rm web pytest` (or `pytest` in `backend/`).
@@ -17,7 +17,7 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 # Sift — implementation plan
 
 ## Context
-Sift is an internal, single-user growth assistant for OpenWealth. It crawls the website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
+Sift is an AI growth assistant (single user for now) for a company's marketing. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
 
 **How this differs from the existing code:** the repo has one commit containing a 1-line `README.md`. Nothing was built from the earlier spec, so there's nothing to reconcile. This is a greenfield build.
 
@@ -33,8 +33,8 @@ Sift is an internal, single-user growth assistant for OpenWealth. It crawls the 
    - Web search uses `web_search_20260209` (Sonnet 5 supports it) with `max_uses` set. Server-tool errors arrive as result blocks, not exceptions, so the code checks for them.
    - Every response is checked for `stop_reason` of `refusal` or `max_tokens` before parsing. Either one is logged as a failed call.
    - LangSmith: `wrap_anthropic(client)` traces sync calls. The wrapper can't see batch submit and collect, so those are wrapped in `@traceable` spans that record each result's usage.
-6. **JavaScript-rendered pages (decided during M2):** our crawler reads server HTML and decodes Next.js's embedded content. Pages that are still thin go to `ApifyRenderer` (Apify Website Content Crawler with a real browser), behind the `PageRenderer` interface in `providers/crawl/render.py`. Apify spend is logged in `ExternalUsage`. getopenwealth.com's homepage, pricing and legal pages need this.
-7. **Content policy (decided after M4):** replaces the hardcoded fintech guardrails. Policy packs (`general`, `financial_services`, `health_wellness`) are YAML files, and packs extend `general`. Onboarding's first model step identifies the product name and suggests a pack; a user-chosen or edited policy is never overwritten. The Compliance Guidelines doc is rendered from the pack and policy, and stays in sync unless hand-edited.
+6. **JavaScript-rendered pages (decided during M2):** our crawler reads server HTML and decodes Next.js's embedded content. Pages that are still thin go to `ApifyRenderer` (Apify Website Content Crawler with a real browser), behind the `PageRenderer` interface in `providers/crawl/render.py`. Apify spend is logged in `ExternalUsage`. Many modern marketing sites (client-rendered SPAs) need this.
+7. **Content policy (decided after M4):** replaces hardcoded, industry-specific guardrails. Policy packs (`general`, `financial_services`, `health_wellness`) are YAML files, and packs extend `general`. Onboarding's first model step identifies the product name and suggests a pack; a user-chosen or edited policy is never overwritten. The Compliance Guidelines doc is rendered from the pack and policy, and stays in sync unless hand-edited.
 8. **Compliance lint (one small addition; I'll drop it if you don't want it):** after generation, a cheap Haiku call checks the draft against the hard rules. It returns `{flags: [{rule, excerpt}]}`, shown as a warning in the detail pane. It never blocks a draft.
 
 ## Project structure
@@ -118,4 +118,4 @@ Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent
 ## Verification
 - `docker compose up` brings up everything. Log in with the superuser from `createsuperuser`.
 - `pytest` runs with Anthropic and Apify mocked (`respx` / `unittest.mock`) and `FakeRedditSource`.
-- Per milestone: M2, onboard openwealth's real URL and watch progress reach Context. M3, "Run now" on Reddit with real Apify and small limits, then check drafts, skipped list, LLMCall costs, and that LangSmith traces appear. Run one scheduled batch to confirm the `waiting_batch` → drafts flow and that `cache_read_input_tokens > 0` on repeat calls. M6, deploy the Blueprint to Render and confirm login works through the rewrite.
+- Per milestone: M2, onboard a real company URL and watch progress reach Context. M3, "Run now" on Reddit with real Apify and small limits, then check drafts, skipped list, LLMCall costs, and that LangSmith traces appear. Run one scheduled batch to confirm the `waiting_batch` → drafts flow and that `cache_read_input_tokens > 0` on repeat calls. M6, deploy the Blueprint to Render and confirm login works through the rewrite.

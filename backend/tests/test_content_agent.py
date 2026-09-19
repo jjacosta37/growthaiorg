@@ -19,21 +19,24 @@ from tests.fakes import message, schema_title
 pytestmark = pytest.mark.django_db
 
 PROPOSALS = [
-    {"title": "Portfolio Rebalancing Guide: Strategies for Every Investor", "angle": "dup of a published post",
-     "target_keywords": ["rebalancing"], "pillar": "Investing", "why": "x"},
-    {"title": "Roth Conversion Ladders, Step by Step", "angle": "How a ladder works",
-     "target_keywords": ["roth conversion ladder"], "pillar": "Taxes", "why": "Common question"},
-    {"title": "Roth conversion ladder: a step-by-step walkthrough", "angle": "near-dup within the batch",
-     "target_keywords": ["roth ladder"], "pillar": "Taxes", "why": "x"},
-    {"title": "What an Employer 401(k) Match Is Really Worth", "angle": "Match math",
-     "target_keywords": ["401k match"], "pillar": "Retirement", "why": "Free money"},
+    {"title": "Sprint Planning Guide: Strategies for Every Team", "angle": "dup of a published post",
+     "target_keywords": ["sprint planning"], "pillar": "Planning", "why": "x"},
+    {"title": "Running Retrospectives, Step by Step", "angle": "How a retro works",
+     "target_keywords": ["sprint retrospective"], "pillar": "Team rituals", "why": "Common question"},
+    {"title": "Running retrospectives: a step-by-step walkthrough", "angle": "near-dup within the batch",
+     "target_keywords": ["retro meeting"], "pillar": "Team rituals", "why": "x"},
+    {"title": "What a Weekly Standup Is Really For", "angle": "Standup purpose",
+     "target_keywords": ["weekly standup"], "pillar": "Meetings", "why": "Common question"},
 ]
 
 
-def post_json(title="Roth Conversion Ladders, Step by Step", body="## What is a ladder\nText.\n\n## Conclusion\nDone.",
-              meta="Learn how a Roth conversion ladder works."):
-    return json.dumps({"title": title, "meta_description": meta, "slug": "Roth Conversion Ladders!!",
-                       "target_keywords": ["roth conversion ladder", " backdoor roth "], "body_md": body})
+RETRO_BODY = "## What is a retrospective\nText.\n\n## Conclusion\nDone."
+
+
+def post_json(title="Running Retrospectives, Step by Step", body=RETRO_BODY,
+              meta="Learn how to run a useful retrospective."):
+    return json.dumps({"title": title, "meta_description": meta, "slug": "Running Retrospectives!!",
+                       "target_keywords": ["sprint retrospective", " retro meeting "], "body_md": body})
 
 
 def responder(post=None, lint=None):
@@ -58,8 +61,8 @@ def _topic_from(params):
 @pytest.fixture
 def project():
     p = Project.current()
-    CrawledPage.objects.create(project=p, url="https://ow.example/blog/portfolio-rebalancing-guide",
-                               title="Portfolio Rebalancing Guide: Strategies for Every Investor",
+    CrawledPage.objects.create(project=p, url="https://acme.example/blog/sprint-planning-guide",
+                               title="Sprint Planning Guide: Strategies for Every Team",
                                content_text="x", content_hash="h")
     return p
 
@@ -72,12 +75,12 @@ def run_content(project, **params):
 
 
 def test_near_duplicate_detection():
-    existing = ["Portfolio Rebalancing Guide: Strategies for Every Investor", "How to Calculate Diversification"]
-    assert is_near_duplicate("Portfolio rebalancing: a guide", existing)
-    assert is_near_duplicate("How to calculate portfolio diversification", existing)
-    assert not is_near_duplicate("Roth conversion ladders explained", existing)
+    existing = ["Sprint Planning Guide: Strategies for Every Team", "How to Estimate Project Timelines"]
+    assert is_near_duplicate("Sprint planning: a guide", existing)
+    assert is_near_duplicate("How to estimate project timelines accurately", existing)
+    assert not is_near_duplicate("Writing better meeting notes", existing)
     assert not is_near_duplicate("The", existing)
-    assert slugify("  What's a 401(k) Match?! ") == "what-s-a-401-k-match"
+    assert slugify("  What's a 1:1 Meeting?! ") == "what-s-a-1-1-meeting"
 
 
 DISCLAIMER = "This article is for informational purposes only."
@@ -86,8 +89,8 @@ DISCLAIMER = "This article is for informational purposes only."
 def test_finalize_post_cleans_slug_h1_and_adds_disclaimer():
     parsed = BlogPostDraft.model_validate_json(post_json(body="# Stray H1\n\n## Intro\nHello."))
     content = finalize_post(parsed, DISCLAIMER)
-    assert content["slug"] == "roth-conversion-ladders"
-    assert content["keywords"] == ["roth conversion ladder", "backdoor roth"]
+    assert content["slug"] == "running-retrospectives"
+    assert content["keywords"] == ["sprint retrospective", "retro meeting"]
     assert content["body_md"].startswith("## Intro")
     assert content["body_md"].rstrip().endswith(f"*{DISCLAIMER}*")
 
@@ -97,7 +100,7 @@ def test_finalize_post_cleans_slug_h1_and_adds_disclaimer():
 
 
 def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic):
-    BlogTopic.objects.create(project=project, title="Emergency fund sizing", status="rejected")
+    BlogTopic.objects.create(project=project, title="Onboarding checklists", status="rejected")
     fake = fake_anthropic(responder=responder())
 
     run = run_content(project)
@@ -105,17 +108,17 @@ def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic):
     assert run.status == "succeeded", run.error or run.stats
     assert run.stats == {"topics_proposed": 2, "topics_duplicate": 2, "drafted": 1}
     topics = {t.title: t.status for t in BlogTopic.objects.exclude(status="rejected")}
-    assert topics == {"Roth Conversion Ladders, Step by Step": "drafted",
-                      "What an Employer 401(k) Match Is Really Worth": "proposed"}
+    assert topics == {"Running Retrospectives, Step by Step": "drafted",
+                      "What a Weekly Standup Is Really For": "proposed"}
 
     topics_call = next(c for c in fake.messages.calls if schema_title(c) == "TopicProposals")
     user = topics_call["messages"][0]["content"]
-    assert "Portfolio Rebalancing Guide" in user and "Emergency fund sizing" in user  # covered + rejected
+    assert "Sprint Planning Guide" in user and "Onboarding checklists" in user  # covered + rejected
 
     draft = Draft.objects.get()
     assert (draft.kind, draft.agent_type, draft.blog_topic.title) == (
-        "blog_post", "content", "Roth Conversion Ladders, Step by Step")
-    assert draft.current_version.content["slug"] == "roth-conversion-ladders"
+        "blog_post", "content", "Running Retrospectives, Step by Step")
+    assert draft.current_version.content["slug"] == "running-retrospectives"
     assert draft.compliance_flags == []
 
 
@@ -151,8 +154,8 @@ def test_request_topic_drafts_it_now(client, project, fake_anthropic, django_cap
     fake_anthropic(responder=responder())
     with django_capture_on_commit_callbacks(execute=True):
         resp = client.post("/api/agents/content/topics/", {
-            "title": "Is a robo-advisor enough?", "angle": "Compare robo vs. human",
-            "target_keywords": ["robo advisor"],
+            "title": "Is a kanban board enough?", "angle": "Compare kanban vs. scrum",
+            "target_keywords": ["kanban board"],
         }, format="json")
     assert resp.status_code == 201, resp.json()
     body = resp.json()
@@ -163,9 +166,9 @@ def test_request_topic_drafts_it_now(client, project, fake_anthropic, django_cap
     topic = client.get("/api/agents/content/topics/").json()["results"][0]
     assert topic["status"] == "drafted" and topic["draft_id"]
     detail = client.get(f"/api/drafts/{topic['draft_id']}/").json()
-    assert detail["title"] == "Is a robo-advisor enough?"
-    assert detail["blog_topic"]["angle"] == "Compare robo vs. human"
-    assert detail["copy_text"].startswith("# Is a robo-advisor enough?\n\n## What is a ladder")
+    assert detail["title"] == "Is a kanban board enough?"
+    assert detail["blog_topic"]["angle"] == "Compare kanban vs. scrum"
+    assert detail["copy_text"].startswith("# Is a kanban board enough?\n\n## What is a retrospective")
     assert detail["open_url"] == ""
 
 

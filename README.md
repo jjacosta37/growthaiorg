@@ -1,6 +1,6 @@
 # Sift
 
-An internal AI growth assistant for OpenWealth. Sift reads the website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
+An AI growth assistant for a company's marketing. Sift reads the company's website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
 
 The architecture, data model and milestones are in [`CLAUDE.md`](CLAUDE.md).
 

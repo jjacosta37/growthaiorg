@@ -39,7 +39,7 @@ def test_manual_run_scores_sync_and_drafts_above_threshold(project, fake_anthrop
     run = run_now(project)
 
     assert run.status == "succeeded", run.error or run.stats
-    assert source.queries[0].subreddits == ["Bogleheads"] and source.queries[0].keywords == ["rebalancing"]
+    assert source.queries[0].subreddits == ["projectmanagement"] and source.queries[0].keywords == ["invoicing"]
     assert RedditPost.objects.count() == 4  # duplicate "a" in the same fetch collapsed
     assert run.stats == {"fetched": 5, "new_posts": 4, "duplicates": 1, "scored": 4, "above_threshold": 1,
                          "threshold": 70, "drafted": 1}

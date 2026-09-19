@@ -23,7 +23,7 @@ def client():
 @pytest.fixture
 def project():
     p = Project.current()
-    p.website_url = "https://ow.example"
+    p.website_url = "https://acme.example"
     p.save()
     save_document(p, "product", "# Product Information\nv1", source="ai", prompt_version="v1", model="m")
     save_document(p, "audience", "# Target Audience\nv1", source="ai", prompt_version="v1", model="m")
@@ -67,7 +67,7 @@ def test_start_onboarding_enqueues_and_conflicts(client, project, django_capture
 
 
 def test_regenerate_doc_end_to_end(client, project, fake_anthropic, django_capture_on_commit_callbacks):
-    CrawledPage.objects.create(project=project, url="https://ow.example/", title="Home",
+    CrawledPage.objects.create(project=project, url="https://acme.example/", title="Home",
                                content_text="Home " * 100, content_hash="h")
     facts = {"product_summary": "Summary.", "competitors": []}
     fake = fake_anthropic(message("# Product Information\nv2"), message(json.dumps(facts)))
@@ -98,6 +98,6 @@ def test_status_line_shows_active_run(client, project):
 
 
 def test_pages_endpoint(client, project):
-    CrawledPage.objects.create(project=project, url="https://ow.example/a", title="A", content_text="abc",
+    CrawledPage.objects.create(project=project, url="https://acme.example/a", title="A", content_text="abc",
                                content_hash="h")
     assert client.get("/api/context/pages/").json()[0]["chars"] == 3

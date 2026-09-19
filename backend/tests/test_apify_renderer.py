@@ -37,21 +37,21 @@ def run(status="SUCCEEDED", cost=0.031):
 
 def test_render_maps_items_and_cost():
     client = FakeApify(run(), [
-        {"url": "https://ow.example/pricing", "markdown": "# Pricing\nOne plan.", "text": "Pricing One plan.",
+        {"url": "https://acme.example/pricing", "markdown": "# Pricing\nOne plan.", "text": "Pricing One plan.",
          "metadata": {"title": "Pricing | OW"}},
-        {"url": "https://ow.example/", "markdown": "", "text": "Home text", "metadata": {}},
-        {"url": "https://ow.example/empty", "markdown": "", "text": ""},
+        {"url": "https://acme.example/", "markdown": "", "text": "Home text", "metadata": {}},
+        {"url": "https://acme.example/empty", "markdown": "", "text": ""},
     ])
-    r = ApifyRenderer("tok", client=client).render(["https://ow.example/pricing", "https://ow.example/"])
+    r = ApifyRenderer("tok", client=client).render(["https://acme.example/pricing", "https://acme.example/"])
 
     actor_id, run_input = client.calls[0]
     assert actor_id == "apify/website-content-crawler"
     assert run_input["maxCrawlDepth"] == 0 and run_input["maxCrawlPages"] == 2
-    assert run_input["startUrls"] == [{"url": "https://ow.example/pricing"}, {"url": "https://ow.example/"}]
+    assert run_input["startUrls"] == [{"url": "https://acme.example/pricing"}, {"url": "https://acme.example/"}]
     assert run_input["crawlerType"].startswith("playwright")
     assert [(p.url, p.title, p.text) for p in r.pages] == [
-        ("https://ow.example/pricing", "Pricing | OW", "# Pricing\nOne plan."),  # markdown preferred
-        ("https://ow.example/", "", "Home text"),
+        ("https://acme.example/pricing", "Pricing | OW", "# Pricing\nOne plan."),  # markdown preferred
+        ("https://acme.example/", "", "Home text"),
     ]
     assert (r.external_id, r.cost_usd, r.error) == ("apify_run_1", Decimal("0.031"), "")
 

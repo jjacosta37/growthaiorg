@@ -1,5 +1,5 @@
-"""Sift is a platform: OpenWealth is one customer. The active prompts and the guardrails must not
-bake in any customer or industry. Industry specifics belong in policies/*.yaml (data)."""
+"""Sift is a platform for any company. Active prompts, the guardrails and application code must not
+bake in any customer or industry; industry specifics belong in policies/*.yaml (data)."""
 
 import re
 from pathlib import Path
@@ -9,16 +9,22 @@ from django.conf import settings
 
 from llm.prompts import available_versions
 
+# Industry-specific terms that must never appear outside policy packs.
 BANNED = [
-    r"openwealth", r"fintech", r"\binvest", r"\bretire", r"\broth\b", r"\b401", r"\birs\b", r"portfolio",
-    r"financial", r"\bstock", r"crypto", r"advisor", r"\btax", r"investment returns", r"\bus-focused",
+    r"fintech", r"\binvest", r"\bretire", r"\broth\b", r"\b401\(?k", r"\birs\b", r"portfolio", r"financial",
+    r"\bstocks?\b", r"crypto", r"advisor", r"\btax(es)?\b", r"investment returns", r"\bus-focused",
+    r"medical", r"\bdiagnos", r"patients?\b",
 ]
+
+
+def banned_hits(text: str) -> list[str]:
+    text = text.lower()
+    return [pat for pat in BANNED if re.search(pat, text)]
 
 
 def active_prompt_files():
     root = Path(settings.PROMPTS_DIR)
-    tasks = {p.parent for p in root.rglob("v*.md")}
-    for d in sorted(tasks):
+    for d in sorted({p.parent for p in root.rglob("v*.md")}):
         task = ".".join(d.relative_to(root).parts)
         yield d / f"v{available_versions(task)[-1]}.md"
     yield root / "_system" / "guardrails.md"
@@ -26,15 +32,16 @@ def active_prompt_files():
 
 @pytest.mark.parametrize("path", list(active_prompt_files()), ids=lambda p: str(p.relative_to(p.parents[2])))
 def test_active_prompts_are_industry_neutral(path):
-    text = path.read_text().lower()
-    hits = [pat for pat in BANNED if re.search(pat, text)]
+    hits = banned_hits(path.read_text())
     assert not hits, f"{path.name} contains {hits}; move industry specifics into a policy pack"
 
 
-def test_code_has_no_customer_name():
+def test_application_code_is_industry_neutral():
     root = Path(settings.BASE_DIR)
-    offenders = [
-        str(p.relative_to(root)) for p in root.rglob("*.py")
-        if "tests" not in p.parts and "migrations" not in p.parts and "openwealth" in p.read_text().lower()
-    ]
-    assert offenders == []
+    offenders = {}
+    for p in root.rglob("*.py"):
+        if {"tests", "migrations"} & set(p.parts):
+            continue
+        if hits := banned_hits(p.read_text()):
+            offenders[str(p.relative_to(root))] = hits
+    assert offenders == {}

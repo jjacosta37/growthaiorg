@@ -38,7 +38,7 @@ def test_list_filters_and_sorts(client, drafts):
     assert [r["id"] for r in by_score] == [d["hi1"].id, d["mid1"].id]
     assert by_score[0] | {"created_at": None} == {
         "id": d["hi1"].id, "channel": "reddit", "kind": "reddit_comment", "status": "new",
-        "title": "hi-yes: question hi1", "score": 90, "subreddit": "Bogleheads", "unread": True, "flag_count": 0,
+        "title": "hi-yes: question hi1", "score": 90, "subreddit": "projectmanagement", "unread": True, "flag_count": 0,
         "created_at": None,
     }
     assert client.get("/api/drafts/?agent=x").json()["results"] == []
@@ -48,9 +48,9 @@ def test_list_filters_and_sorts(client, drafts):
 def test_detail_has_everything_to_render_and_copy(client, drafts):
     _, d = drafts
     data = client.get(f"/api/drafts/{d['hi1'].id}/").json()
-    assert data["content"]["body"].startswith("Rebalancing once a year")
+    assert data["content"]["body"].startswith("Weekly planning sessions")
     assert data["copy_text"] == data["content"]["body"]
-    assert data["open_url"] == "https://www.reddit.com/r/Bogleheads/comments/hi1/q/"
+    assert data["open_url"] == "https://www.reddit.com/r/projectmanagement/comments/hi1/q/"
     assert data["source_post"]["relevance_reason"] == "because hi-yes"
     assert [v["source"] for v in data["versions"]] == ["ai_initial"]
     assert data["char_limit"] is None
@@ -83,7 +83,7 @@ def test_dismiss_restore_post_read_and_counts(client, drafts):
     assert client.post(f"/api/drafts/{d['mid1'].id}/restore/").json()["status"] == "new"
 
     resp = client.post(f"/api/drafts/{d['hi1'].id}/mark-posted/",
-                       {"posted_url": "https://www.reddit.com/r/Bogleheads/comments/hi1/q/c1/"})
+                       {"posted_url": "https://www.reddit.com/r/projectmanagement/comments/hi1/q/c1/"})
     assert resp.json()["status"] == "posted" and resp.json()["posted_at"]
     assert [r["id"] for r in client.get("/api/drafts/?status=posted").json()["results"]] == [d["hi1"].id]
     assert client.get("/api/inbox/counts/").json()["ready"]["reddit"] == 1
@@ -97,7 +97,7 @@ def test_regenerate_with_nudge(client, drafts, django_capture_on_commit_callback
     before = len(fake.messages.calls)
     with django_capture_on_commit_callbacks(execute=True):
         resp = client.post(f"/api/drafts/{draft.id}/regenerate/",
-                           {"nudge": "no_mention", "instruction": "Mention the 5/25 rule"})
+                           {"nudge": "no_mention", "instruction": "Mention the two-pizza rule"})
     assert resp.status_code == 202
     run = AgentRun.objects.get(pk=resp.json()["id"])
     assert (run.kind, run.status) == ("regenerate_draft", "succeeded")
@@ -105,7 +105,7 @@ def test_regenerate_with_nudge(client, drafts, django_capture_on_commit_callback
     comment_call = next(c for c in fake.messages.calls[before:]
                         if "RedditComment" in json.dumps(c.get("output_config", {})))
     user = comment_call["messages"][0]["content"]
-    assert "<previous_draft>" in user and "Don't mention Acme at all" in user and "5/25 rule" in user
+    assert "<previous_draft>" in user and "Don't mention Acme at all" in user and "two-pizza rule" in user
 
     versions = client.get(f"/api/drafts/{draft.id}/").json()["versions"]
     assert [(v["source"], v["nudge"]) for v in versions] == [("ai_initial", ""), ("ai_regenerated", "no_mention")]

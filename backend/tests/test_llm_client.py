@@ -43,7 +43,7 @@ def test_structured_output_parsed_and_logged(score_prompt, fake_anthropic, setti
 
 
 def test_context_block_is_first_and_cached(score_prompt, fake_anthropic):
-    set_context_provider(lambda project: [("Product Information", "OpenWealth does analytics.")])
+    set_context_provider(lambda project: [("Product Information", "Acme helps small teams track projects.")])
     try:
         fake = fake_anthropic(message('{"ok": true, "echo": "x"}'))
         result = llm.complete("t.score", {"word": "x"}, project=Project.current())

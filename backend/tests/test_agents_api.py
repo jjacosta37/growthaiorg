@@ -34,12 +34,12 @@ def test_patch_config_validates_merges_and_schedules(client):
 
     resp = client.patch("/api/agents/reddit/", {
         "enabled": True, "cron": "15 */3 * * *",
-        "config": {"relevance_threshold": 60, "subreddits": ["r/investing", "investing", " fatFIRE "]},
+        "config": {"relevance_threshold": 60, "subreddits": ["r/productivity", "productivity", " startups "]},
     }, format="json")
     assert resp.status_code == 200, resp.json()
     data = resp.json()
-    assert data["config"]["subreddits"] == ["investing", "fatFIRE"]  # normalized + deduped
-    assert data["config"]["keywords"] == ["rebalancing"]  # untouched keys kept
+    assert data["config"]["subreddits"] == ["productivity", "startups"]  # normalized + deduped
+    assert data["config"]["keywords"] == ["invoicing"]  # untouched keys kept
     assert data["next_run_at"] is not None
 
     task = PeriodicTask.objects.get(name=f"agent:{Project.current().pk}:reddit")

@@ -14,22 +14,22 @@ from tests.fakes import message, schema_title, task_system
 pytestmark = pytest.mark.django_db
 
 DOC_MARKERS = {
-    "**Product Information** document": "# Product Information\nOpenWealth shows portfolio analytics.",
-    "**Target Audience** document": "# Target Audience\nSelf-directed investors.",
+    "**Product Information** document": "# Product Information\nAcme Fit plans home workouts.",
+    "**Target Audience** document": "# Target Audience\nBusy adults who train at home.",
     "**Brand Voice** document": "# Brand Voice\nClear and calm.",
-    "**Competitor Analysis** document": "# Competitor Analysis\n### Acme (https://acme.example)",
+    "**Competitor Analysis** document": "# Competitor Analysis\n### Globex (https://globex.example)",
     "**Content Strategy** document": "# Content Strategy\nPillars.",
 }
-FACTS = {"product_summary": "OpenWealth is portfolio analytics. For retail investors.",
-         "competitors": [{"name": "Acme", "url": "https://acme.example"}, {"name": "Beta", "url": ""},
-                         {"name": "Gamma", "url": "gamma.example"}]}
-REDDIT = {"subreddits": [{"name": "r/Bogleheads", "reason": "index investors"},
-                         {"name": "personalfinance", "reason": "questions"},
-                         {"name": "Bogleheads", "reason": "dup"}],
-          "keywords": ["portfolio tracker", " asset allocation ", "portfolio tracker", ""]}
+FACTS = {"product_summary": "Acme Fit plans home workouts. For busy adults.",
+         "competitors": [{"name": "Globex", "url": "https://globex.example"}, {"name": "Initech", "url": ""},
+                         {"name": "Umbrella", "url": "umbrella.example"}]}
+REDDIT = {"subreddits": [{"name": "r/homegym", "reason": "home trainers"},
+                         {"name": "bodyweightfitness", "reason": "questions"},
+                         {"name": "homegym", "reason": "dup"}],
+          "keywords": ["workout plan", " home workout ", "workout plan", ""]}
 
 
-IDENTITY = {"product_name": "Acme Wealth", "industry_pack": "financial_services", "reason": "portfolio analytics"}
+IDENTITY = {"product_name": "Acme Fit", "industry_pack": "health_wellness", "reason": "fitness app"}
 
 
 def responder(fail=(), identity=None):
@@ -65,8 +65,8 @@ def fake_crawl(n_pages):
 @pytest.fixture
 def project():
     p = Project.current()
-    p.website_url = "https://ow.example"
-    p.competitors = [{"name": "acme", "url": ""}]  # added by hand earlier; must not duplicate
+    p.website_url = "https://acme.example"
+    p.competitors = [{"name": "globex", "url": ""}]  # added by hand earlier; must not duplicate
     p.save()
     return p
 
@@ -89,22 +89,22 @@ def test_full_onboarding(project, fake_anthropic, monkeypatch):
     docs = {d.kind: d for d in ContextDocument.objects.filter(project=project)}
     assert set(docs) == {"product", "audience", "brand_voice", "competitors", "content_strategy", "compliance"}
     assert docs["product"].source == "ai" and docs["product"].prompt_version == "v1"
-    assert docs["compliance"].source == "template" and docs["compliance"].prompt_version == "pack:financial_services"
-    assert "Acme Wealth" in docs["compliance"].content_md and "No performance claims" in docs["compliance"].content_md
+    assert docs["compliance"].source == "template" and docs["compliance"].prompt_version == "pack:health_wellness"
+    assert "Acme Fit" in docs["compliance"].content_md and "No medical claims" in docs["compliance"].content_md
     assert docs["product"].revisions.count() == 1
 
     project.refresh_from_db()
-    assert project.name == "Acme Wealth"  # identified from the site
-    assert project.content_policy.pack == "financial_services" and project.content_policy.source == "suggested"
+    assert project.name == "Acme Fit"  # identified from the site
+    assert project.content_policy.pack == "health_wellness" and project.content_policy.source == "suggested"
     assert project.onboarded_at is not None
-    assert project.product_summary.startswith("OpenWealth is")
+    assert project.product_summary.startswith("Acme Fit plans")
     assert project.competitors == [  # merged case-insensitively; bare domains get a scheme
-        {"name": "acme", "url": ""}, {"name": "Beta", "url": ""}, {"name": "Gamma", "url": "https://gamma.example"}
+        {"name": "globex", "url": ""}, {"name": "Initech", "url": ""}, {"name": "Umbrella", "url": "https://umbrella.example"}
     ]
 
     reddit = AgentConfig.objects.get(project=project, agent_type="reddit").config
-    assert reddit == {"subreddits": ["Bogleheads", "personalfinance"],
-                      "keywords": ["portfolio tracker", "asset allocation"]}
+    assert reddit == {"subreddits": ["homegym", "bodyweightfitness"],
+                      "keywords": ["workout plan", "home workout"]}
 
     # LLM calls: identify + 5 docs + facts + suggestions, all linked to the run.
     assert LLMCall.objects.filter(agent_run=run).count() == 8
@@ -112,10 +112,10 @@ def test_full_onboarding(project, fake_anthropic, monkeypatch):
     # The crawled site is in the cached prefix, identical across the five doc calls.
     doc_calls = [c for c in fake.messages.calls if schema_title(c) is None]
     # Docs are written under the suggested pack's rules, with the identified name.
-    assert "`returns_claim`" in doc_calls[0]["system"][0]["text"]
-    assert "for Acme Wealth" in doc_calls[0]["system"][-1]["text"]
+    assert "`medical_claims`" in doc_calls[0]["system"][0]["text"]
+    assert "for Acme Fit" in doc_calls[0]["system"][-1]["text"]
     site_blocks = {c["system"][1]["text"] for c in doc_calls}
-    assert len(site_blocks) == 1 and "<page url=\"https://ow.example/p0\"" in site_blocks.pop()
+    assert len(site_blocks) == 1 and "<page url=\"https://acme.example/p0\"" in site_blocks.pop()
     assert all(c["system"][1]["cache_control"] == {"type": "ephemeral"} for c in doc_calls)
     # Later docs see earlier ones.
     last_user = doc_calls[-1]["messages"][0]["content"]
@@ -131,7 +131,7 @@ def test_competitor_research_uses_web_search(project, fake_anthropic, monkeypatc
     run_onboarding(project)
     comp = next(c for c in fake.messages.calls if "**Competitor Analysis**" in task_system(c))
     assert comp["tools"][0]["name"] == "web_search"
-    assert "acme" in comp["messages"][0]["content"]  # known competitors passed in
+    assert "globex" in comp["messages"][0]["content"]  # known competitors passed in
 
 
 def test_doc_failure_makes_run_partial(project, fake_anthropic, monkeypatch):
@@ -167,7 +167,7 @@ def test_recrawl_keeps_human_edits_and_config(project, fake_anthropic, monkeypat
 
     save_document(project, "brand_voice", "# Brand Voice\nMy edit.", source="human")
     cfg = AgentConfig.objects.get(project=project, agent_type="reddit")
-    cfg.config = {"subreddits": ["investing"], "keywords": ["mine"]}
+    cfg.config = {"subreddits": ["running"], "keywords": ["mine"]}
     cfg.save()
 
     run = run_onboarding(project, AgentRun.Kind.RECRAWL)
@@ -177,8 +177,8 @@ def test_recrawl_keeps_human_edits_and_config(project, fake_anthropic, monkeypat
     assert voice.content_md.startswith("# Brand Voice\nMy edit")
     assert "Kept Brand Voice (edited by you)" in run.events.values_list("message", flat=True)
     cfg.refresh_from_db()
-    assert cfg.config == {"subreddits": ["investing"], "keywords": ["mine"]}
-    assert run.stats["reddit_suggestions"]["subreddits"] == ["Bogleheads", "personalfinance"]
+    assert cfg.config == {"subreddits": ["running"], "keywords": ["mine"]}
+    assert run.stats["reddit_suggestions"]["subreddits"] == ["homegym", "bodyweightfitness"]
 
     run = run_onboarding(project, AgentRun.Kind.RECRAWL, overwrite_edited=True)
     assert ContextDocument.objects.get(project=project, kind="brand_voice").source == "ai"
@@ -189,7 +189,7 @@ def test_site_block_budget_reports_overflow(project, settings):
 
     settings.CONTEXT_PAGE_CHAR_LIMIT = 100
     settings.CONTEXT_SITE_CHAR_BUDGET = 250
-    pages = [CrawledPage(url=f"https://ow.example/{i}", title=str(i), content_text="x" * 500) for i in range(4)]
+    pages = [CrawledPage(url=f"https://acme.example/{i}", title=str(i), content_text="x" * 500) for i in range(4)]
     text, left_out = render_site_block(project, pages)
     assert left_out == 2
     assert text.count("<page ") == 2 and "x" * 101 not in text

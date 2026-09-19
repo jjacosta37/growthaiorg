@@ -10,7 +10,7 @@ from tests.fakes import message, schema_title
 SCORES = {"hi-yes": (90, True), "hi-no": (85, False), "mid": (60, True), "lo": (10, False)}
 
 
-def post(pid, marker, sub="Bogleheads"):
+def post(pid, marker, sub="projectmanagement"):
     return RedditPostData(
         reddit_id=pid, subreddit=sub, title=f"{marker}: question {pid}", body=f"Body of {pid}",
         url=f"https://www.reddit.com/r/{sub}/comments/{pid}/q/", author="u", upvotes=5, num_comments=2,
@@ -18,7 +18,7 @@ def post(pid, marker, sub="Bogleheads"):
     )
 
 
-def reddit_responder(comment_body="Rebalancing once a year is common. Here's how to think about it...",
+def reddit_responder(comment_body="Weekly planning sessions are common. Here's how to think about it...",
                      lint_flags=None):
     def respond(params):
         title = schema_title(params)
@@ -42,7 +42,7 @@ def configure(project=None, **overrides):
         project.name = "Acme"
         project.save()
     cfg = AgentConfig.for_project(project, "reddit")
-    cfg.config = {"subreddits": ["Bogleheads"], "keywords": ["rebalancing"], "relevance_threshold": 70,
+    cfg.config = {"subreddits": ["projectmanagement"], "keywords": ["invoicing"], "relevance_threshold": 70,
                   **overrides}
     cfg.save()
     return cfg

@@ -88,7 +88,7 @@ def test_user_policy_is_not_overwritten_by_onboarding(fake_anthropic, monkeypatc
     from tests.test_onboarding import fake_crawl, responder, run_onboarding
 
     project = Project.current()
-    project.website_url = "https://ow.example"
+    project.website_url = "https://acme.example"
     project.name = "Chosen Name"
     project.save()
     from apps.policy.service import apply_pack

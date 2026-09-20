@@ -6,6 +6,8 @@ from contextlib import contextmanager
 from django.db import transaction
 from django.utils import timezone
 
+from llm.tracing import trace_group
+
 from .models import AgentRun, RunEvent
 
 log = logging.getLogger(__name__)
@@ -63,26 +65,40 @@ def running(run: AgentRun):
 
     A pipeline can set run.status = WAITING_BATCH and return; a follow-up task later re-enters
     `running(run)` to finish it (started_at is kept).
+
+    Everything inside is one LangSmith span, so a run's LLM calls appear as children of it
+    rather than as scattered root traces.
     """
     run.status = AgentRun.Status.RUNNING
     run.started_at = run.started_at or timezone.now()
     run.save(update_fields=["status", "started_at"])
     reporter = RunReporter(run)
-    try:
-        yield reporter
-    except Exception as exc:
-        log.exception("run %s failed", run.pk)
-        run.refresh_from_db(fields=["stats"])
-        run.status = AgentRun.Status.FAILED
-        run.error = f"{type(exc).__name__}: {exc}"[:5000]
+
+    with trace_group(
+        f"{run.kind} run #{run.pk}",
+        metadata={
+            "agent_run_id": run.pk,
+            "kind": run.kind,
+            "trigger": run.trigger,
+            "project_id": run.project_id,
+        },
+        inputs={"params": run.params},
+    ):
+        try:
+            yield reporter
+        except Exception as exc:
+            log.exception("run %s failed", run.pk)
+            run.refresh_from_db(fields=["stats"])
+            run.status = AgentRun.Status.FAILED
+            run.error = f"{type(exc).__name__}: {exc}"[:5000]
+            run.current_step = ""
+            run.finished_at = timezone.now()
+            run.save(update_fields=["status", "error", "current_step", "finished_at"])
+            reporter.event(f"Failed: {exc}", RunEvent.Level.ERROR)
+            return
+        if run.status == AgentRun.Status.WAITING_BATCH:
+            return  # a follow-up task will finish it
+        run.status = AgentRun.Status.PARTIAL if run.stats.get("errors") else AgentRun.Status.SUCCEEDED
         run.current_step = ""
         run.finished_at = timezone.now()
-        run.save(update_fields=["status", "error", "current_step", "finished_at"])
-        reporter.event(f"Failed: {exc}", RunEvent.Level.ERROR)
-        return
-    if run.status == AgentRun.Status.WAITING_BATCH:
-        return  # a follow-up task will finish it
-    run.status = AgentRun.Status.PARTIAL if run.stats.get("errors") else AgentRun.Status.SUCCEEDED
-    run.current_step = ""
-    run.finished_at = timezone.now()
-    run.save(update_fields=["status", "current_step", "finished_at"])
+        run.save(update_fields=["status", "current_step", "finished_at"])

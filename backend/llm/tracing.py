@@ -2,6 +2,7 @@
 
 import logging
 import types
+from contextlib import contextmanager
 
 from django.conf import settings
 from langsmith import traceable
@@ -47,6 +48,34 @@ def wrap_client(client):
         return client
 
 
+@contextmanager
+def trace_group(name: str, *, run_type: str = "chain", metadata: dict | None = None,
+                inputs: dict | None = None):
+    """A parent span that every traced call inside becomes a child of.
+
+    Without one, each llm.complete() is its own root trace and a run's calls scatter across
+    LangSmith. This is the equivalent of the sequence node LangGraph puts around a graph.
+
+    Only creating the span is guarded: if the body raises, that is the pipeline's exception
+    and it must propagate (langsmith records it on the span on the way out).
+    """
+    if not settings.LANGSMITH_TRACING:
+        yield None
+        return
+
+    try:
+        from langsmith import trace
+
+        span = trace(name=name, run_type=run_type, inputs=inputs or {}, metadata=metadata or {})
+    except Exception:
+        log.warning("couldn't open the LangSmith span %r; continuing untraced", name, exc_info=True)
+        yield None
+        return
+
+    with span as run_tree:
+        yield run_tree
+
+
 def current_run_id() -> str:
     if not settings.LANGSMITH_TRACING:
         return ""
@@ -54,4 +83,4 @@ def current_run_id() -> str:
     return str(run.id) if run is not None else ""
 
 
-__all__ = ["traceable", "wrap_client", "current_run_id"]
+__all__ = ["traceable", "wrap_client", "current_run_id", "trace_group"]

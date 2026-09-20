@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.errors import validation_errors
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from . import registry
 from .models import AgentConfig, AgentRun
@@ -56,7 +56,7 @@ def agent_summary(project, spec) -> dict:
 class AgentListView(APIView):
     @extend_schema(operation_id="agents_list", responses={200: dict})
     def get(self, request):
-        project = Project.current()
+        project = current_project(request)
         return Response([agent_summary(project, spec) for spec in registry.all_agents()])
 
 
@@ -71,12 +71,12 @@ class AgentDetailView(APIView):
 
     @extend_schema(responses={200: dict})
     def get(self, request, agent_type):
-        return Response(agent_summary(Project.current(), spec_or_404(agent_type)))
+        return Response(agent_summary(current_project(request), spec_or_404(agent_type)))
 
     @extend_schema(request=AgentConfigUpdateSerializer, responses={200: dict})
     def patch(self, request, agent_type):
         spec = spec_or_404(agent_type)
-        project = Project.current()
+        project = current_project(request)
         data = AgentConfigUpdateSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         config = agent_config(project, spec)
@@ -108,7 +108,7 @@ class RunNowView(APIView):
     def post(self, request, agent_type):
         spec = spec_or_404(agent_type)
         try:
-            run = create_run(Project.current(), spec.agent_type, trigger=AgentRun.Trigger.MANUAL)
+            run = create_run(current_project(request), spec.agent_type, trigger=AgentRun.Trigger.MANUAL)
         except RunConflict as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         transaction.on_commit(lambda: run_agent_task.delay(run.id))
@@ -120,7 +120,7 @@ class AgentRunsView(generics.ListAPIView):
 
     def get_queryset(self):
         spec = spec_or_404(self.kwargs["agent_type"])
-        return AgentRun.objects.filter(project=Project.current(), kind=spec.agent_type)
+        return AgentRun.objects.filter(project=current_project(self.request), kind=spec.agent_type)
 
 
 class SkippedPostSerializer(serializers.Serializer):
@@ -154,7 +154,7 @@ class RedditSkippedView(generics.ListAPIView):
 
         from apps.reddit.models import RedditPost
 
-        qs = RedditPost.objects.filter(project=Project.current(), drafts__isnull=True)
+        qs = RedditPost.objects.filter(project=current_project(self.request), drafts__isnull=True)
         if run_id := self.request.query_params.get("run"):
             qs = qs.filter(first_seen_run_id=run_id)
         if min_score := self.request.query_params.get("min_score"):

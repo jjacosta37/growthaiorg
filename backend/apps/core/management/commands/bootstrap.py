@@ -21,4 +21,16 @@ class Command(BaseCommand):
             User.objects.create_superuser(username=username, email=email, password=password)
             self.stdout.write(f"Created admin user {username}")
 
-        self.stdout.write(f"Project: {Project.current().name}")
+        # The one place a project is created without a user asking for it. It runs
+        # single-threaded in the one-shot `migrate` service, before web/worker/beat start,
+        # so there is no second process to race with.
+        owner = User.objects.filter(username=username).first() if username else None
+        if owner is None:
+            self.stdout.write("No admin user; skipping the default project")
+            return
+        project = owner.projects.first()
+        if project is None:
+            project = Project.objects.create(owner=owner, name=Project.DEFAULT_NAME)
+            self.stdout.write(f"Created project {project.name!r} for {owner.username}")
+        else:
+            self.stdout.write(f"Project: {project.name}")

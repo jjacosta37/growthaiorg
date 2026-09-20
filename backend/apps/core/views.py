@@ -9,7 +9,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Project
-from .serializers import LoginSerializer, ProjectSerializer, UserSerializer
+from .selection import NoProjectSelected, current_project, select_project
+from .serializers import (
+    LoginSerializer,
+    ProjectListSerializer,
+    ProjectSerializer,
+    UserSerializer,
+)
 from .status import build_status
 
 
@@ -52,11 +58,69 @@ class MeView(APIView):
 
 
 class ProjectView(generics.RetrieveUpdateAPIView):
+    """The project the caller is currently working on."""
+
     serializer_class = ProjectSerializer
     http_method_names = ["get", "patch"]
 
     def get_object(self):
-        return Project.current()
+        return current_project(self.request)
+
+
+class ProjectListCreateView(generics.ListCreateAPIView):
+    """The caller's projects. Creating one also selects it, since that is always why."""
+
+    serializer_class = ProjectListSerializer
+
+    def get_queryset(self):
+        # Settle the selection first, so a session that has never chosen one still gets an
+        # `is_current` row. Without this the switcher opens with nothing marked current.
+        try:
+            current_project(self.request)
+        except NoProjectSelected:
+            pass  # a brand new account: the list is empty and there is nothing to select
+        return Project.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        project = serializer.save(owner=self.request.user)
+        select_project(self.request, project)
+
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), "request": self.request}
+
+
+class ProjectSelectView(APIView):
+    """Switch project. The frontend clears its cache afterwards: query keys are
+    project-scoped but don't carry the project id."""
+
+    @extend_schema(request=None, responses={200: ProjectListSerializer})
+    def post(self, request, pk):
+        project = generics.get_object_or_404(Project, pk=pk, owner=request.user)
+        select_project(request, project)
+        return Response(ProjectListSerializer(project, context={"request": request}).data)
+
+
+class ProjectDeleteView(generics.DestroyAPIView):
+    """Delete a project and everything under it.
+
+    Domain rows cascade, but celery-beat rows are not related objects, so they are removed
+    explicitly. Left behind, they'd fire every tick forever against a project id that no
+    longer resolves.
+    """
+
+    serializer_class = ProjectListSerializer
+
+    def get_queryset(self):
+        return Project.objects.filter(owner=self.request.user)
+
+    def perform_destroy(self, instance):
+        from apps.agents.schedule import delete_periodic_tasks
+
+        pk = instance.pk
+        delete_periodic_tasks(instance)
+        instance.delete()
+        if self.request.session.get("project_id") == pk:
+            self.request.session.pop("project_id", None)
 
 
 class HealthView(APIView):
@@ -79,4 +143,4 @@ class StatusView(APIView):
 
     @extend_schema(responses={200: dict})
     def get(self, request):
-        return Response(build_status(Project.current()))
+        return Response(build_status(current_project(request)))

@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from apps.agents.models import AgentRun
 from apps.agents.runs import RunConflict, create_run
 from apps.agents.serializers import AgentRunSerializer
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from .documents import ordered_documents, save_document
 from .models import ContextDocument, CrawledPage, DocSource
@@ -39,7 +39,7 @@ class StartOnboardingView(APIView):
     def post(self, request):
         data = StartOnboardingSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        project = Project.current()
+        project = current_project(request)
         project.website_url = data.validated_data["website_url"]
         if name := data.validated_data.get("name", "").strip():
             project.name = name
@@ -53,7 +53,7 @@ class RecrawlView(APIView):
     def post(self, request):
         data = RecrawlSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        project = Project.current()
+        project = current_project(request)
         if not project.website_url:
             return Response({"detail": "Run onboarding first."}, status=status.HTTP_400_BAD_REQUEST)
         return _start(project, AgentRun.Kind.RECRAWL, dict(data.validated_data), onboarding_task)
@@ -62,7 +62,7 @@ class RecrawlView(APIView):
 class DocumentListView(APIView):
     @extend_schema(responses={200: ContextDocumentSerializer(many=True)})
     def get(self, request):
-        docs = ordered_documents(Project.current())
+        docs = ordered_documents(current_project(request))
         return Response(ContextDocumentSerializer(docs, many=True).data)
 
 
@@ -74,7 +74,9 @@ class DocumentDetailView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         kind = doc_kind_or_404(self.kwargs["kind"])
-        return generics.get_object_or_404(ContextDocument, project=Project.current(), kind=kind)
+        return generics.get_object_or_404(
+            ContextDocument, project=current_project(self.request), kind=kind
+        )
 
     def perform_update(self, serializer):
         doc = self.get_object()
@@ -88,7 +90,7 @@ class RegenerateDocumentView(APIView):
     @extend_schema(request=None, responses={202: AgentRunSerializer})
     def post(self, request, kind):
         kind = doc_kind_or_404(kind)
-        return _start(Project.current(), AgentRun.Kind.REGENERATE_DOC, {"kind": kind}, regenerate_document_task)
+        return _start(current_project(request), AgentRun.Kind.REGENERATE_DOC, {"kind": kind}, regenerate_document_task)
 
 
 class DocumentRevisionsView(generics.ListAPIView):
@@ -97,7 +99,9 @@ class DocumentRevisionsView(generics.ListAPIView):
 
     def get_queryset(self):
         kind = doc_kind_or_404(self.kwargs["kind"])
-        doc = generics.get_object_or_404(ContextDocument, project=Project.current(), kind=kind)
+        doc = generics.get_object_or_404(
+            ContextDocument, project=current_project(self.request), kind=kind
+        )
         return doc.revisions.order_by("-id")
 
 
@@ -106,4 +110,4 @@ class CrawledPageListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        return CrawledPage.objects.filter(project=Project.current())
+        return CrawledPage.objects.filter(project=current_project(self.request))

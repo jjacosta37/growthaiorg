@@ -10,7 +10,7 @@ from apps.agents.models import AgentRun
 from apps.agents.serializers import AgentRunSerializer
 from apps.agents.tasks import regenerate_draft_task
 from apps.core.errors import validation_errors
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from . import services
 from .models import Draft
@@ -24,8 +24,13 @@ from .serializers import (
 )
 
 
-def drafts_qs():
-    return (Draft.objects.filter(project=Project.current())
+def drafts_qs(request):
+    """Drafts belonging to the caller's current project.
+
+    Every draft endpoint looks its object up through here, so scoping this one function is
+    what keeps one user's inbox out of another's.
+    """
+    return (Draft.objects.filter(project=current_project(request))
             .select_related("current_version", "source_reddit_post", "blog_topic", "project"))
 
 
@@ -40,7 +45,7 @@ class DraftListView(generics.ListAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        qs = drafts_qs()
+        qs = drafts_qs(self.request)
         params = self.request.query_params
         if agent := params.get("agent"):
             qs = qs.filter(agent_type__in=agent.split(","))
@@ -54,15 +59,15 @@ class DraftDetailView(generics.RetrieveAPIView):
     serializer_class = DraftDetailSerializer
 
     def get_queryset(self):
-        return drafts_qs().prefetch_related("versions")
+        return drafts_qs(self.request).prefetch_related("versions")
 
 
 class _DraftAction(APIView):
-    def get_draft(self, pk) -> Draft:
-        return generics.get_object_or_404(drafts_qs(), pk=pk)
+    def get_draft(self, request, pk) -> Draft:
+        return generics.get_object_or_404(drafts_qs(request), pk=pk)
 
-    def detail(self, draft) -> Response:
-        draft = drafts_qs().prefetch_related("versions").get(pk=draft.pk)
+    def detail(self, request, draft) -> Response:
+        draft = drafts_qs(request).prefetch_related("versions").get(pk=draft.pk)
         return Response(DraftDetailSerializer(draft).data)
 
 
@@ -71,14 +76,14 @@ class EditView(_DraftAction):
     def post(self, request, pk):
         data = EditSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        draft = self.get_draft(pk)
+        draft = self.get_draft(request, pk)
         try:
             services.edit(draft, data.validated_data["content"])
         except services.DraftStateError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         except PydanticValidationError as exc:
             return Response({"content": validation_errors(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return self.detail(draft)
+        return self.detail(request, draft)
 
 
 class RegenerateView(_DraftAction):
@@ -86,7 +91,7 @@ class RegenerateView(_DraftAction):
     def post(self, request, pk):
         data = RegenerateSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        draft = self.get_draft(pk)
+        draft = self.get_draft(request, pk)
         if draft.status != Draft.Status.NEW:
             return Response({"detail": f"Can't regenerate a draft that is {draft.status}"},
                             status=status.HTTP_409_CONFLICT)
@@ -105,9 +110,9 @@ class MarkPostedView(_DraftAction):
     def post(self, request, pk):
         data = MarkPostedSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        draft = self.get_draft(pk)
+        draft = self.get_draft(request, pk)
         services.mark_posted(draft, data.validated_data["posted_url"])
-        return self.detail(draft)
+        return self.detail(request, draft)
 
 
 class DismissView(_DraftAction):
@@ -115,26 +120,26 @@ class DismissView(_DraftAction):
     def post(self, request, pk):
         data = DismissSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        draft = self.get_draft(pk)
+        draft = self.get_draft(request, pk)
         try:
             services.dismiss(draft, data.validated_data["reason"], data.validated_data["note"])
         except services.DraftStateError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-        return self.detail(draft)
+        return self.detail(request, draft)
 
 
 class RestoreView(_DraftAction):
     @extend_schema(request=None, responses={200: DraftDetailSerializer})
     def post(self, request, pk):
-        draft = self.get_draft(pk)
+        draft = self.get_draft(request, pk)
         services.restore(draft)
-        return self.detail(draft)
+        return self.detail(request, draft)
 
 
 class ReadView(_DraftAction):
     @extend_schema(request=None, responses={204: None})
     def post(self, request, pk):
-        services.mark_read(self.get_draft(pk))
+        services.mark_read(self.get_draft(request, pk))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -143,7 +148,7 @@ class InboxCountsView(APIView):
 
     @extend_schema(responses={200: dict})
     def get(self, request):
-        new = Draft.objects.filter(project=Project.current(), status=Draft.Status.NEW)
+        new = Draft.objects.filter(project=current_project(request), status=Draft.Status.NEW)
         per_agent = dict(new.values_list("agent_type").annotate(n=Count("id")).values_list("agent_type", "n"))
         return Response({
             "unread": new.filter(read_at__isnull=True).count(),

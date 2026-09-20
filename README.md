@@ -11,7 +11,8 @@ An AI growth assistant for a company's marketing. Helmly reads the company's web
 | Endpoint | What it does |
 |---|---|
 | `POST /api/auth/login/`, `/logout/`, `GET /api/auth/me/`, `GET /api/auth/csrf/` | Session auth |
-| `GET/PATCH /api/project/` | Project, including the editable competitors list |
+| `GET/PATCH /api/project/` | The caller's current project, including the editable competitors list |
+| `GET/POST /api/projects/`, `POST /api/projects/<id>/select/`, `DELETE /api/projects/<id>/` | The caller's projects: list, create, switch, delete |
 | `GET/PATCH /api/policy/` | Content rules, author role, disclosure and blog disclaimer (used in every LLM call and by the compliance check) |
 | `GET /api/policy/packs/`, `POST /api/policy/apply-pack/` `{pack}` | Industry policy packs (`backend/policies/*.yaml`) and switching to one |
 | `GET /api/status/` | Sidebar status line: active runs and the current step |
@@ -138,7 +139,7 @@ cd backend && ../.venv/bin/pytest
 | `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated |
 | `DATABASE_URL` | Postgres URL |
 | `REDIS_URL` | Celery broker |
-| `HELMLY_ADMIN_USERNAME`, `HELMLY_ADMIN_PASSWORD`, `HELMLY_ADMIN_EMAIL` | The single user, created by `bootstrap` |
+| `HELMLY_ADMIN_USERNAME`, `HELMLY_ADMIN_PASSWORD`, `HELMLY_ADMIN_EMAIL` | The first admin user and their project, created by `bootstrap`. Add more users in Django admin. |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `LLM_MODEL_FAST`, `LLM_MODEL_WRITER` | Model IDs for cheap tasks and for writing |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith tracing of every LLM call |

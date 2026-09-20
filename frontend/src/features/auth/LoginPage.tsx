@@ -1,4 +1,4 @@
-/** Login. Single user, no signup — from "Helmly - Login.dc.html". */
+/** Login. Accounts are created by an admin, so there is no signup — from "Helmly - Login.dc.html". */
 
 import { useState, type FormEvent } from "react";
 

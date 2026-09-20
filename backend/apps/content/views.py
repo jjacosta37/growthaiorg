@@ -8,7 +8,7 @@ from apps.agents.models import AgentRun
 from apps.agents.runs import RunConflict, create_run
 from apps.agents.serializers import AgentRunSerializer
 from apps.agents.tasks import run_agent_task
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from .models import BlogTopic
 
@@ -53,7 +53,8 @@ class TopicListView(generics.ListCreateAPIView):
         return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
-        qs = BlogTopic.objects.filter(project=Project.current()).prefetch_related("drafts").order_by("-created_at")
+        qs = (BlogTopic.objects.filter(project=current_project(self.request))
+              .prefetch_related("drafts").order_by("-created_at"))
         if s := self.request.query_params.get("status"):
             qs = qs.filter(status=s)
         return qs
@@ -65,7 +66,7 @@ class TopicListView(generics.ListCreateAPIView):
         v = dict(data.validated_data)
         draft_now = v.pop("draft_now")
         with transaction.atomic():
-            topic = BlogTopic.objects.create(project=Project.current(), requested_by_user=True, **v)
+            topic = BlogTopic.objects.create(project=current_project(request), requested_by_user=True, **v)
             run = None
             if draft_now:
                 try:
@@ -80,7 +81,7 @@ class TopicListView(generics.ListCreateAPIView):
 class TopicDraftView(APIView):
     @extend_schema(request=None, responses={202: AgentRunSerializer})
     def post(self, request, pk):
-        topic = generics.get_object_or_404(BlogTopic, pk=pk, project=Project.current())
+        topic = generics.get_object_or_404(BlogTopic, pk=pk, project=current_project(request))
         if topic.status == BlogTopic.Status.REJECTED:
             return Response({"detail": "Topic was rejected"}, status=status.HTTP_409_CONFLICT)
         try:
@@ -93,7 +94,7 @@ class TopicDraftView(APIView):
 class TopicRejectView(APIView):
     @extend_schema(request=None, responses={200: BlogTopicSerializer})
     def post(self, request, pk):
-        topic = generics.get_object_or_404(BlogTopic, pk=pk, project=Project.current())
+        topic = generics.get_object_or_404(BlogTopic, pk=pk, project=current_project(request))
         topic.status = BlogTopic.Status.REJECTED
         topic.save(update_fields=["status", "updated_at"])
         return Response(BlogTopicSerializer(topic).data)

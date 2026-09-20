@@ -5,7 +5,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from .models import ContentPolicy
 from .packs import UnknownPack, all_packs, get_pack
@@ -65,11 +65,11 @@ class PolicyView(APIView):
 
     @extend_schema(responses={200: PolicySerializer})
     def get(self, request):
-        return Response(PolicySerializer(policy_for(Project.current())).data)
+        return Response(PolicySerializer(policy_for(current_project(request))).data)
 
     @extend_schema(request=PolicySerializer, responses={200: PolicySerializer})
     def patch(self, request):
-        project = Project.current()
+        project = current_project(request)
         policy = policy_for(project)
         data = PolicySerializer(policy, data=request.data, partial=True)
         data.is_valid(raise_exception=True)
@@ -96,7 +96,7 @@ class ApplyPackView(APIView):
     def post(self, request):
         data = ApplyPackSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        project = Project.current()
+        project = current_project(request)
         try:
             policy = apply_pack(policy_for(project), data.validated_data["pack"], source=ContentPolicy.Source.USER)
         except UnknownPack:

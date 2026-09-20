@@ -10,11 +10,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { AGENT_LABEL } from "../lib/format";
-import { useAgents, useInboxCounts, useProject, useStatus } from "../lib/queries";
+import {
+  useAgents,
+  useInboxCounts,
+  useProject,
+  useProjects,
+  useSelectProject,
+  useStatus,
+} from "../lib/queries";
 import { AGENT_TYPES, type AgentType } from "../lib/types";
 import { ChannelDot } from "./badges";
 import { HelmTile } from "./brand";
 import { Button, cx } from "./primitives";
+import { DropdownMenu } from "./feedback";
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return cx("shell__nav-item", isActive && "shell__nav-item--active");
@@ -26,7 +34,6 @@ export function Shell() {
   const agents = useAgents();
   const status = useStatus();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   // status is the most frequent call, so its failure is the best offline signal.
   const offline = status.isError;
@@ -54,20 +61,7 @@ export function Shell() {
       <div className="shell__body">
         <nav className="shell__sidebar">
           <div>
-            <button
-              type="button"
-              className="shell__project"
-              onClick={() => navigate("/settings")}
-              title={project.data?.website_url ?? undefined}
-            >
-              <HelmTile size={20} />
-              <span className="truncate" style={{ flex: 1, fontWeight: "var(--weight-semibold)" }}>
-                {project.data?.name || "Helmly"}
-              </span>
-              <span className="subtle" style={{ fontSize: 10 }}>
-                ▾
-              </span>
-            </button>
+            <ProjectSwitcher name={project.data?.name} url={project.data?.website_url} />
 
             <NavLink to="/inbox" className={navClass}>
               <span style={{ flex: 1, fontWeight: "var(--weight-medium)" }}>Inbox</span>
@@ -173,6 +167,47 @@ function StatusLine({
       />
       <span>{message}</span>
     </div>
+  );
+}
+
+/** Project switcher. Switching clears the query cache — see useSelectProject. */
+function ProjectSwitcher({ name, url }: { name?: string; url?: string }) {
+  const projects = useProjects();
+  const select = useSelectProject();
+  const navigate = useNavigate();
+  const rows = projects.data ?? [];
+
+  return (
+    <DropdownMenu
+      align="left"
+      trigger={({ toggle }) => (
+        <button type="button" className="shell__project" onClick={toggle} title={url}>
+          <HelmTile size={20} />
+          <span className="truncate" style={{ flex: 1, fontWeight: "var(--weight-semibold)" }}>
+            {name || "Helmly"}
+          </span>
+          <span className="subtle" style={{ fontSize: 10 }}>
+            ▾
+          </span>
+        </button>
+      )}
+      items={[
+        ...rows.map((row) => ({
+          label: row.name,
+          hint: row.is_current ? "current" : undefined,
+          onSelect: () => {
+            if (row.is_current) return;
+            select.mutate(row.id, {
+              // A project mid-onboarding has no context yet, so start it there.
+              onSuccess: () => navigate(row.onboarded_at ? "/inbox" : "/onboarding"),
+            });
+          },
+        })),
+        "separator" as const,
+        { label: "New project…", onSelect: () => navigate("/projects/new") },
+        { label: "Settings", onSelect: () => navigate("/settings") },
+      ]}
+    />
   );
 }
 

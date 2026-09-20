@@ -59,10 +59,8 @@ def responder(batch, revised=None, lint=None):
 
 
 @pytest.fixture
-def project():
-    p = Project.current()
-    p.name = "Acme"
-    p.save()
+def project(project):
+    p = project
     AgentConfig.objects.create(project=p, agent_type="x", config={"posts_per_run": 3,
                                                                    "formats": ["insight", "thread", "question"]})
     return p
@@ -151,13 +149,6 @@ def test_recent_drafts_are_sent_and_formats_rotate(project, fake_anthropic):
     user = next(c for c in fake.messages.calls if schema_title(c) == "XPostBatch")["messages"][0]["content"]
     assert "[insight] First idea about deadlines." in user
     assert "1. thread:" in user  # insight was used last time
-
-
-@pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
 
 
 def test_detail_edit_and_regenerate(client, project, fake_anthropic, django_capture_on_commit_callbacks):

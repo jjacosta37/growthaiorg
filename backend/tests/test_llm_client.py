@@ -42,15 +42,15 @@ def test_structured_output_parsed_and_logged(score_prompt, fake_anthropic, setti
     assert params["messages"] == [{"role": "user", "content": "Word: helm"}]
 
 
-def test_context_block_is_first_and_cached(score_prompt, fake_anthropic):
+def test_context_block_is_first_and_cached(score_prompt, fake_anthropic, project):
     set_context_provider(lambda project: [("Product Information", "Acme helps small teams track projects.")])
     try:
         fake = fake_anthropic(message('{"ok": true, "echo": "x"}'))
-        result = llm.complete("t.score", {"word": "x"}, project=Project.current())
+        result = llm.complete("t.score", {"word": "x"}, project=project)
     finally:
         set_context_provider(None)
 
-    assert result.call.project == Project.current()
+    assert result.call.project == project
     system = fake.messages.calls[0]["system"]
     assert system[0]["cache_control"] == {"type": "ephemeral"}
     assert "# Content rules" in system[0]["text"] and "`fabrication`" in system[0]["text"]  # general pack

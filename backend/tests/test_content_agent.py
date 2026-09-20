@@ -59,8 +59,8 @@ def _topic_from(params):
 
 
 @pytest.fixture
-def project():
-    p = Project.current()
+def project(project):
+    p = project
     CrawledPage.objects.create(project=p, url="https://acme.example/blog/sprint-planning-guide",
                                title="Sprint Planning Guide: Strategies for Every Team",
                                content_text="x", content_hash="h")
@@ -141,13 +141,6 @@ def test_long_meta_description_is_flagged(project, fake_anthropic):
     run_content(project)
     flags = Draft.objects.get().compliance_flags
     assert [f["rule"] for f in flags] == ["seo"] and "200 characters" in flags[0]["explanation"]
-
-
-@pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
 
 
 def test_request_topic_drafts_it_now(client, project, fake_anthropic, django_capture_on_commit_callbacks):

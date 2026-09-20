@@ -11,13 +11,6 @@ from apps.policy.service import policy_for
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
-
-
 def test_packs_extend_general():
     general = {r["id"] for r in get_pack("general").rules}
     fin = {r["id"] for r in get_pack("financial_services").rules}
@@ -28,16 +21,15 @@ def test_packs_extend_general():
     assert "Phrases to avoid" in get_pack("financial_services").compliance_doc  # extra appended
 
 
-def test_default_policy_is_general(client):
+def test_default_policy_is_general(client, project):
     data = client.get("/api/policy/").json()
     assert (data["pack"], data["source"], data["author_role"]) == ("general", "default", "founder")
-    assert data["disclosure_preview"] == "(Disclosure: I'm the founder of My project.)"
+    assert data["disclosure_preview"] == f"(Disclosure: I'm the founder of {project.name}.)"
     assert {p["id"] for p in client.get("/api/policy/packs/").json()} >= {"general", "financial_services",
                                                                          "health_wellness"}
 
 
-def test_apply_pack_and_edit_rules_resyncs_compliance_doc(client):
-    project = Project.current()
+def test_apply_pack_and_edit_rules_resyncs_compliance_doc(client, project):
     save_document(project, "compliance", "# old", source="template")
 
     resp = client.post("/api/policy/apply-pack/", {"pack": "financial_services"})
@@ -48,7 +40,7 @@ def test_apply_pack_and_edit_rules_resyncs_compliance_doc(client):
     rules = resp.json()["rules"] + [{"id": "no_emoji", "title": "No emoji", "description": "Never use emoji."}]
     resp = client.patch("/api/policy/", {"rules": rules, "author_role": "CEO"}, format="json")
     assert resp.status_code == 200
-    assert resp.json()["disclosure_preview"] == "(Disclosure: I'm the CEO of My project.)"
+    assert resp.json()["disclosure_preview"] == f"(Disclosure: I'm the CEO of {project.name}.)"
     assert "Never use emoji." in ContextDocument.objects.get(kind="compliance").content_md
 
     save_document(project, "compliance", "# my own words", source="human")
@@ -64,13 +56,12 @@ def test_validation(client):
     assert client.patch("/api/policy/", {"rules": dup}, format="json").status_code == 400
 
 
-def test_guardrails_follow_the_policy(fake_anthropic, prompts_tmp):
+def test_guardrails_follow_the_policy(project, fake_anthropic, prompts_tmp):
     import llm
     from tests.conftest import write_prompt
     from tests.fakes import message
 
     write_prompt(prompts_tmp, "t.x", "v1", "model_tier: fast\nschema: SmokeResult", "Do.", "Go")
-    project = Project.current()
     project.name = "Glow"
     project.save()
     from apps.policy.service import apply_pack
@@ -84,10 +75,9 @@ def test_guardrails_follow_the_policy(fake_anthropic, prompts_tmp):
     assert "not medical advice" in guardrails
 
 
-def test_user_policy_is_not_overwritten_by_onboarding(fake_anthropic, monkeypatch):
+def test_user_policy_is_not_overwritten_by_onboarding(project, fake_anthropic, monkeypatch):
     from tests.test_onboarding import fake_crawl, responder, run_onboarding
 
-    project = Project.current()
     project.website_url = "https://acme.example"
     project.name = "Chosen Name"
     project.save()
@@ -104,12 +94,11 @@ def test_user_policy_is_not_overwritten_by_onboarding(fake_anthropic, monkeypatc
     assert not any("ProjectIdentity" in str(c.get("output_config")) for c in fake.messages.calls)
 
 
-def test_removing_disclosure_rule_drops_the_instruction():
+def test_removing_disclosure_rule_drops_the_instruction(project):
     from apps.policy.service import guardrail_variables
 
-    project = Project.current()
     policy = policy_for(project)
-    assert guardrail_variables(project)["disclosure"] == "(Disclosure: I'm the founder of My project.)"
+    assert guardrail_variables(project)["disclosure"] == f"(Disclosure: I'm the founder of {project.name}.)"
     policy.rules = [r for r in policy.rules if r["id"] != "missing_disclosure"]
     policy.save()
     assert guardrail_variables(project)["disclosure"] == ""

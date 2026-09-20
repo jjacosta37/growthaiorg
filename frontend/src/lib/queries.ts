@@ -13,7 +13,7 @@ import {
   type UseQueryOptions,
 } from "@tanstack/react-query";
 
-import { api, type Paginated } from "./api";
+import { api, setProjectId, type Paginated } from "./api";
 import type {
   AgentRun,
   AgentSummary,
@@ -34,6 +34,7 @@ import type {
   Nudge,
   PolicyPack,
   Project,
+  ProjectSummary,
   RunEvent,
   SkippedPost,
   StatsPayload,
@@ -48,6 +49,7 @@ export const IDLE_POLL_MS = 15_000;
 export const keys = {
   me: ["me"] as const,
   project: ["project"] as const,
+  projects: ["projects"] as const,
   status: ["status"] as const,
   agents: ["agents"] as const,
   agent: (type: AgentType) => ["agents", type] as const,
@@ -118,6 +120,55 @@ export function useProject(enabled = true) {
     queryFn: () => api.get<Project>("/project/"),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+/** Every project this user owns, for the switcher. */
+export function useProjects(enabled = true) {
+  return useQuery({
+    queryKey: keys.projects,
+    queryFn: () => api.list<ProjectSummary>("/projects/"),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Switch project.
+ *
+ * Every cached key is project-scoped but none carries the project id, so the cache has to
+ * go — otherwise one project's drafts render under another's name.
+ */
+export function useSelectProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.post<ProjectSummary>(`/projects/${id}/select/`),
+    onSuccess: (project) => {
+      setProjectId(project.id);
+      qc.clear();
+    },
+  });
+}
+
+export function useCreateProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name?: string }) => api.post<ProjectSummary>("/projects/", body),
+    onSuccess: (project) => {
+      setProjectId(project.id);
+      qc.clear();
+    },
+  });
+}
+
+export function useDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<void>(`/projects/${id}/`),
+    onSuccess: () => {
+      setProjectId(null);
+      qc.clear();
+    },
   });
 }
 

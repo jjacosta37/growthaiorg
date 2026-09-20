@@ -16,13 +16,6 @@ from llm.models import LLMCall
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
-
-
 def make_draft(project, agent="reddit", kind="reddit_comment", content=None, created=None):
     d = Draft.objects.create(project=project, agent_type=agent, kind=kind)
     services.add_version(d, content or {"body": "hi"}, source="ai_initial")
@@ -38,8 +31,8 @@ def test_week_starts_are_mondays():
     assert starts[2] - starts[1] == timedelta(weeks=1)
 
 
-def test_dismissed_at_set_and_cleared():
-    d = make_draft(Project.current())
+def test_dismissed_at_set_and_cleared(project):
+    d = make_draft(project)
     services.dismiss(d, "not_relevant")
     assert d.dismissed_at is not None
     services.restore(d)
@@ -47,8 +40,7 @@ def test_dismissed_at_set_and_cleared():
     assert d.dismissed_at is None and d.status == "new"
 
 
-def test_stats_weekly_counts_spend_and_rates(client):
-    project = Project.current()
+def test_stats_weekly_counts_spend_and_rates(client, project):
     now = timezone.now()
     old = now - timedelta(weeks=1)
     # reddit: 3 generated (1 last week), 1 posted, 1 dismissed; x: 1 pending

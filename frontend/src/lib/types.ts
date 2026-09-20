@@ -75,6 +75,16 @@ export interface Project {
   onboarded_at: string | null;
 }
 
+/** A row in the project switcher. */
+export interface ProjectSummary {
+  id: number;
+  name: string;
+  website_url: string;
+  onboarded_at: string | null;
+  is_current: boolean;
+  created_at: string;
+}
+
 /** /api/status/ — the sidebar poll. */
 export interface StatusPayload {
   active: { id: number; kind: RunKind; status: RunStatus; current_step: string }[];

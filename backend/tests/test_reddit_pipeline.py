@@ -19,15 +19,10 @@ pytestmark = pytest.mark.django_db
 
 
 def run_now(project=None, trigger=AgentRun.Trigger.MANUAL):
-    run = create_run(project or Project.current(), "reddit", trigger=trigger)
+    run = create_run(project, "reddit", trigger=trigger)
     run_agent_task(run.id)
     run.refresh_from_db()
     return run
-
-
-@pytest.fixture
-def project():
-    return Project.current()
 
 
 def test_manual_run_scores_sync_and_drafts_above_threshold(project, fake_anthropic, monkeypatch):

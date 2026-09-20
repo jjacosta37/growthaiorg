@@ -35,6 +35,17 @@ export class ApiError extends Error {
     return this.status === 409;
   }
 
+  /** The caller has no project yet — the app shows the create-project screen. */
+  get isNoProject(): boolean {
+    if (this.status !== 409) return false;
+    const body = this.body;
+    return (
+      !!body &&
+      typeof body === "object" &&
+      (body as { code?: string }).code === "no_project"
+    );
+  }
+
   get isUnauthenticated(): boolean {
     return this.status === 401 || this.status === 403;
   }
@@ -120,6 +131,25 @@ export function summarise(errors: FieldErrors): string {
     .join(" · ");
 }
 
+/* --------------------------------------------------------------- project */
+
+/**
+ * The project the UI is currently showing, sent as X-Project-Id.
+ *
+ * The backend also keeps a selection in the session; the header wins, so two browser tabs
+ * can sit on different projects. A project id the user doesn't own is ignored server-side
+ * rather than refused.
+ */
+let projectId: number | null = null;
+
+export function setProjectId(id: number | null): void {
+  projectId = id;
+}
+
+export function getProjectId(): number | null {
+  return projectId;
+}
+
 /* ------------------------------------------------------------------ CSRF */
 
 let csrfToken: string | null = null;
@@ -199,6 +229,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const method = (options.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { Accept: "application/json" };
 
+  if (projectId !== null) headers["X-Project-Id"] = String(projectId);
+
   if (!SAFE_METHODS.has(method)) {
     headers["X-CSRFToken"] = await ensureCsrfToken();
   }
@@ -252,6 +284,7 @@ export const api = {
     request<T>(path, { method: "GET", query, signal }),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: "PATCH", body }),
+  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 
   /**
    * A list endpoint, whichever shape it uses. Several endpoints return a bare array

@@ -14,15 +14,9 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
-
-
-@pytest.fixture
-def project():
-    p = Project.current()
+def project(project):
+    """The conftest project, with a site and two documents already written."""
+    p = project
     p.website_url = "https://acme.example"
     p.save()
     save_document(p, "product", "# Product Information\nv1", source="ai", prompt_version="v1", model="m")
@@ -55,7 +49,8 @@ def test_start_onboarding_enqueues_and_conflicts(client, project, django_capture
     assert resp.status_code == 202
     run_id = resp.json()["id"]
     assert calls == [run_id]
-    assert Project.current().website_url == "https://new.example"
+    project.refresh_from_db()
+    assert project.website_url == "https://new.example"
 
     # Any context run blocks another while it's active.
     assert client.post("/api/context/recrawl/", {}).status_code == 409

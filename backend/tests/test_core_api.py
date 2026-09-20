@@ -33,11 +33,9 @@ def test_session_login_flow_with_csrf(user):
     assert client.get("/api/auth/me/").status_code == 403
 
 
-def test_project_get_and_patch_competitors(user):
-    client = APIClient()
-    client.force_authenticate(user)
+def test_project_get_and_patch_competitors(client, project):
     data = client.get("/api/project/").json()
-    assert data["name"] == "My project"
+    assert data["name"] == project.name
 
     resp = client.patch(
         "/api/project/",

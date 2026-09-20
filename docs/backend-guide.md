@@ -153,7 +153,7 @@ erDiagram
 
 | Model | App | What it is |
 |---|---|---|
-| **Project** | core | The company being grown: name, website, summary, competitors. There's one project for now; `Project.current()` is the only place that assumes that. |
+| **Project** | core | The company being grown: name, website, summary, competitors, and the `owner` who created it. A user may own several. Which one a request acts on is decided in `apps/core/selection.py`. |
 | **ContentPolicy** | policy | The project's content rules, the author role ("founder"), the disclosure template and the blog disclaimer. Seeded from a policy pack. |
 | **CrawledPage** | context | Text of each crawled page (replaced on every crawl). |
 | **ContextDocument / Revision** | context | The six documents. Each save (AI, human edit, or from policy) creates a revision. |
@@ -499,7 +499,7 @@ Agent behaviour (subreddits, thresholds, formats, schedules…) is per-project d
 | Add an agent | New app with `config.py` (Pydantic), `pipeline.py` (`run` + `regenerate`), `agent.py` (`register(AgentSpec(...))`), a draft kind in `apps/inbox/content.py`, and prompt files. Add the app to `INSTALLED_APPS`. |
 | Swap the Reddit data source | Implement `RedditSource` and return it from `apps/reddit/pipeline.get_source()`. |
 | Add auto-publishing later | `AgentConfig.publish_mode` is the hook. Add a mode and a publisher that runs after `create_draft`. |
-| Support multiple projects/tenants | Everything already filters by project. Replace `Project.current()` with the request's project, and add ownership to auth. |
+| Let several people share one project | Projects have a single `owner` today. Add a membership table and resolve through it in `apps/core/selection.py`; every query already filters by project. |
 
 ---
 

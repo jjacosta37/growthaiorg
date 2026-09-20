@@ -15,19 +15,12 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
-def client():
-    c = APIClient()
-    c.force_authenticate(get_user_model().objects.create_user("me", password="pw"))
-    return c
-
-
-@pytest.fixture
-def drafts(fake_anthropic, monkeypatch):
+def drafts(project, fake_anthropic, monkeypatch):
     """Two Reddit drafts (scores 90 and 60) created by a real pipeline run with fakes."""
-    configure(relevance_threshold=50)
+    configure(project, relevance_threshold=50)
     install_source(monkeypatch, [post("mid1", "mid"), post("hi1", "hi-yes")])
     fake = fake_anthropic(responder=reddit_responder())
-    run = create_run(Project.current(), "reddit", trigger=AgentRun.Trigger.MANUAL)
+    run = create_run(project, "reddit", trigger=AgentRun.Trigger.MANUAL)
     run_agent_task(run.id)
     return fake, {d.source_reddit_post.reddit_id: d for d in Draft.objects.all()}
 

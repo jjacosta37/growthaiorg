@@ -2,7 +2,6 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from apps.agents.models import AgentConfig
-from apps.core.models import Project
 from providers.reddit import FakeRedditSource, RedditPostData
 from tests.fakes import message, schema_title
 
@@ -36,11 +35,7 @@ def reddit_responder(comment_body="Weekly planning sessions are common. Here's h
     return respond
 
 
-def configure(project=None, **overrides):
-    project = project or Project.current()
-    if project.name == Project.DEFAULT_NAME:
-        project.name = "Acme"
-        project.save()
+def configure(project, **overrides):
     cfg = AgentConfig.for_project(project, "reddit")
     cfg.config = {"subreddits": ["projectmanagement"], "keywords": ["invoicing"], "relevance_threshold": 70,
                   **overrides}

@@ -17,13 +17,13 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 # Helmly — implementation plan
 
 ## Context
-Helmly is an AI growth assistant (single user for now) for a company's marketing. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
+Helmly is an AI growth assistant for a company's marketing. Users own projects: each project is one company's workspace, and a user can own several and switch between them. Accounts are created by an admin (Django admin or `manage.py bootstrap`); there is no public signup. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
 
 **How this differs from the existing code:** the repo has one commit containing a 1-line `README.md`. Nothing was built from the earlier spec, so there's nothing to reconcile. This is a greenfield build.
 
 ## Decisions and flags (please check these)
 1. **Apify actor: `harshmaur/reddit-scraper`.** Its `withinCommunity` option runs a keyword search inside one subreddit, which is exactly our subreddit × keyword model. It supports sort `new` plus a time range, returns score, comment count and created time, and costs about $2 per 1k results plus $0.02 per run. Its store page reports 99.3% run success. The fallback is `trudax/reddit-scraper-lite` (largest user base, 4.57★, $3.40 per 1k, `searches` + `startUrls`). The actor ID and input mapping live in `providers/reddit/apify.py`, so switching is a config change. Before M3 I'll make one real test run of each actor to confirm the output fields.
-2. **Status line and progress: polling, not SSE.** TanStack Query polls `/api/status` every 2s while a run is active and every 15s when idle. SSE under Django needs ASGI and long-lived connections on Render, which isn't worth it for a single user. Progress events go to a `RunEvent` table, so SSE can be added later with no model changes.
+2. **Status line and progress: polling, not SSE.** TanStack Query polls `/api/status` every 2s while a run is active and every 15s when idle. SSE under Django needs ASGI and long-lived connections on Render, which isn't worth it at this scale. Progress events go to a `RunEvent` table, so SSE can be added later with no model changes.
 3. **Render session auth and the separate static site.** The frontend static site rewrites `/api/*` to the web service, so the browser sees the API on the same origin. That avoids SameSite=None cookies and CORS. I'll check this works in M6. If Render's rewrite doesn't pass cookies through correctly, the fallback is cross-site cookies (`SESSION_COOKIE_SAMESITE=None`, `CSRF_TRUSTED_ORIGINS`, `django-cors-headers` with credentials).
 4. **Editable schedules: `django-celery-beat` DatabaseScheduler.** Saving an `AgentConfig` upserts its `PeriodicTask` (crontab), and beat picks up the change without a restart.
 5. **Claude API details that shape the `llm/` module:**
@@ -69,7 +69,7 @@ render.yaml, .env.example, README.md, CLAUDE.md
 - Every prompt file carries a version string and a content hash. Every `DraftVersion` stores the prompt version and model that produced it.
 
 ## Data model
-- **Project**: name, website_url, product_summary, competitors (JSON list of {name, url}), onboarded_at.
+- **Project**: owner (FK User), name, website_url, product_summary, competitors (JSON list of {name, url}), onboarded_at. Every domain row hangs off a project; the project a request acts on is resolved per request in `apps/core/selection.py` (X-Project-Id header, else the session, else the user's first). There is deliberately no global `Project.current()`.
 - **CrawledPage**: project, url (unique per project), title, content_text, content_hash, fetched_at.
 - **ContextDocument**: project, kind (product, audience, brand_voice, competitors, content_strategy, compliance), content_md, source (ai/human), prompt_version, model, updated_at.
   **ContextDocumentRevision**: doc, content_md, source, created_at. Kept for history and rollback.

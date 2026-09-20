@@ -64,8 +64,11 @@ def fake_crawl(n_pages):
 
 
 @pytest.fixture
-def project():
-    p = Project.current()
+def project(project):
+    """A first-run project: still called DEFAULT_NAME, so onboarding may name it from the
+    site. A project the user has already named is left alone (see identify_project)."""
+    p = project
+    p.name = Project.DEFAULT_NAME
     p.website_url = "https://acme.example"
     p.competitors = [{"name": "globex", "url": ""}]  # added by hand earlier; must not duplicate
     p.save()

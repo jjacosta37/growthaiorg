@@ -13,6 +13,7 @@ from django.utils import timezone
 import llm
 from apps.agents.models import AgentConfig, AgentRun, AgentType, ExternalUsage
 from apps.agents.runs import RunReporter
+from apps.agents.schedule import sync_periodic_task
 from apps.core.models import Project
 from apps.policy.models import ContentPolicy
 from apps.policy.packs import all_packs, get_pack
@@ -198,6 +199,8 @@ def suggest_reddit_targets(project, run: AgentRun, reporter: RunReporter) -> Non
     if not config.config.get("subreddits") and not config.config.get("keywords"):
         config.config = {**config.config, "subreddits": subreddits, "keywords": keywords}
         config.save(update_fields=["config", "updated_at"])
+        # for_project() may have just created this config, so beat has never seen it.
+        sync_periodic_task(config)
         reporter.success(f"Suggested {len(subreddits)} subreddits and {len(keywords)} keywords for the Reddit Agent")
     else:
         reporter.event("Reddit Agent already configured; suggestions saved on this run only")

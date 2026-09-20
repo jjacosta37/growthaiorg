@@ -3,7 +3,7 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.models import Project
+from apps.core.selection import current_project
 
 from .models import AgentRun
 from .serializers import AgentRunSerializer, RunEventSerializer
@@ -13,7 +13,7 @@ class RunListView(generics.ListAPIView):
     serializer_class = AgentRunSerializer
 
     def get_queryset(self):
-        qs = AgentRun.objects.filter(project=Project.current())
+        qs = AgentRun.objects.filter(project=current_project(self.request))
         if kind := self.request.query_params.get("kind"):
             qs = qs.filter(kind__in=kind.split(","))
         return qs
@@ -23,7 +23,7 @@ class RunDetailView(generics.RetrieveAPIView):
     serializer_class = AgentRunSerializer
 
     def get_queryset(self):
-        return AgentRun.objects.filter(project=Project.current())
+        return AgentRun.objects.filter(project=current_project(self.request))
 
 
 class RunEventsView(APIView):
@@ -31,7 +31,7 @@ class RunEventsView(APIView):
 
     @extend_schema(parameters=[OpenApiParameter("after", int)], responses={200: RunEventSerializer(many=True)})
     def get(self, request, pk):
-        run = generics.get_object_or_404(AgentRun, pk=pk, project=Project.current())
+        run = generics.get_object_or_404(AgentRun, pk=pk, project=current_project(request))
         events = run.events.all()
         if after := request.query_params.get("after"):
             events = events.filter(id__gt=int(after))

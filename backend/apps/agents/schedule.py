@@ -46,6 +46,16 @@ def sync_periodic_task(config) -> None:
     )
 
 
+def delete_periodic_tasks(project) -> int:
+    """Remove a project's beat entries.
+
+    PeriodicTask has no FK to Project, so nothing cascades. Left behind, beat would keep
+    firing them and `run_scheduled_agent` would raise Project.DoesNotExist every tick.
+    """
+    deleted, _ = PeriodicTask.objects.filter(name__startswith=f"agent:{project.pk}:").delete()
+    return deleted
+
+
 def next_run_at(config) -> datetime | None:
     if not config.enabled:
         return None

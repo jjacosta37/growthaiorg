@@ -1,14 +1,15 @@
-"""Idempotent setup for fresh environments: the single admin user and the default project."""
+"""Idempotent setup for fresh environments: the admin account.
+
+Projects are not created here — their owner names them on first sign-in."""
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from apps.core.models import Project
 from config.settings.base import env
 
 
 class Command(BaseCommand):
-    help = "Create the admin user (from HELMLY_ADMIN_* env vars) and the default project."
+    help = "Create the admin user from HELMLY_ADMIN_* env vars."
 
     def handle(self, *args, **options):
         username = env("HELMLY_ADMIN_USERNAME", default="")
@@ -21,16 +22,9 @@ class Command(BaseCommand):
             User.objects.create_superuser(username=username, email=email, password=password)
             self.stdout.write(f"Created admin user {username}")
 
-        # The one place a project is created without a user asking for it. It runs
-        # single-threaded in the one-shot `migrate` service, before web/worker/beat start,
-        # so there is no second process to race with.
+        # No project is created here. Projects belong to whoever owns them and are named
+        # by that person, so the app asks on first sign-in rather than inventing one
+        # called "My project". This command provisions the account, nothing more.
         owner = User.objects.filter(username=username).first() if username else None
-        if owner is None:
-            self.stdout.write("No admin user; skipping the default project")
-            return
-        project = owner.projects.first()
-        if project is None:
-            project = Project.objects.create(owner=owner, name=Project.DEFAULT_NAME)
-            self.stdout.write(f"Created project {project.name!r} for {owner.username}")
-        else:
-            self.stdout.write(f"Project: {project.name}")
+        if owner is not None:
+            self.stdout.write(f"{owner.username}: {owner.projects.count()} project(s)")

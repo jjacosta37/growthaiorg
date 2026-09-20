@@ -1,0 +1,37 @@
+/* Context page, from "Helmly - Context.dc.html". */
+
+.revision {
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-2) 0;
+}
+
+.revision:last-child {
+  border-bottom: none;
+}
+
+.revision summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.revision summary::-webkit-details-marker {
+  display: none;
+}
+
+.revision summary::before {
+  content: "▸";
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+}
+
+.revision[open] summary::before {
+  content: "▾";
+}
+
+.revision pre {
+  margin-top: var(--space-2);
+}

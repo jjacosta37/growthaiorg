@@ -4,7 +4,7 @@ An AI growth assistant for a company's marketing. Helmly reads the company's web
 
 **New here? Read [`docs/backend-guide.md`](docs/backend-guide.md)**, which covers the structure, data model and main flows with diagrams. Decisions and conventions are in [`CLAUDE.md`](CLAUDE.md).
 
-**Status:** Phase 1 (backend) is complete: skeleton and `llm/`, onboarding and context docs, inbox and Reddit Agent, Content Agent, X Agent, content policy, stats and deploy. Phase 2 (frontend) is next.
+**Status:** Phase 1 (backend) and Phase 2 (frontend) are built: the Vite app covers login, onboarding, inbox and detail panes, agent pages, context, settings and stats.
 
 ## API so far
 
@@ -45,13 +45,14 @@ Requires Docker.
 
 ```bash
 cp .env.example .env              # set ANTHROPIC_API_KEY, HELMLY_ADMIN_USERNAME/PASSWORD
-docker compose up --build         # web :8000, worker, beat, postgres, redis
+docker compose up --build         # app :5173, api :8000, worker, beat, postgres, redis
 ```
 
 A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `web`, `worker` and `beat` start. `bootstrap` creates the admin user from `HELMLY_ADMIN_*` and the default project. Then:
 
-- API docs (Swagger): http://localhost:8000/api/docs/. Log in first via http://localhost:8000/admin/.
 - Admin (LLM call log, batches, periodic tasks): http://localhost:8000/admin/
+- The app: http://localhost:5173
+- API docs (Swagger): http://localhost:8000/api/docs/. Log in first via http://localhost:8000/admin/.
 - Real API smoke test: `docker compose exec web python manage.py llm_smoke`
 
 <details>
@@ -89,6 +90,29 @@ Also update `.env`: `HELMLY_ADMIN_*` (was `SIFT_ADMIN_*`) and `DATABASE_URL=post
 
 On Render, the Blueprint services were renamed too (`sift-web` → `helmly-web`, and so on), so a redeploy creates new services and prompts for the secrets again.
 </details>
+
+### Frontend
+
+Vite + React + TypeScript, in `frontend/`. `docker compose up` runs it, or run it directly:
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+The dev server proxies `/api` to the backend, so the browser sees a single origin and
+Django's `SameSite=Lax` session cookie works without CORS. Production does the same thing
+through the Render static site's `/api` rewrite, so dev and production behave alike. Point
+the proxy somewhere else with `VITE_API_TARGET`.
+
+```bash
+npm run test        # vitest: formatting, cron phrasing, API error mapping
+npm run lint        # tsc --noEmit
+npm run build       # production bundle into dist/
+npm run gen:types   # regenerate src/lib/schema.d.ts from /api/schema/
+```
+
+Styling is CSS custom properties from `src/styles/tokens.css` (the design handoff's token
+file, unmodified). Components live in `src/components/`, screens in `src/features/`.
 
 ### Tests
 

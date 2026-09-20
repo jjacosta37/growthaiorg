@@ -1,0 +1,244 @@
+/* The three-pane app shell, from "Helmly - App Shell.dc.html". Desktop-first, min 1024px. */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 1024px;
+}
+
+.shell__offline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-danger-subtle);
+  color: var(--color-danger);
+  font-size: var(--text-xs);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------------------------------------------------------------- sidebar */
+
+.shell__sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-3);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+}
+
+.shell__project {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  margin-bottom: 18px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell__project:hover {
+  background: var(--color-surface-sunken);
+}
+
+.shell__nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px var(--space-2);
+  margin-bottom: 2px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.shell__nav-item:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+
+.shell__nav-item--active {
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-weight: var(--weight-medium);
+}
+
+.shell__section {
+  padding: var(--space-4) var(--space-2) 6px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-subtle);
+}
+
+.shell__count {
+  font-size: 11px;
+  color: var(--color-text-subtle);
+}
+
+.shell__count--strong {
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: var(--weight-semibold);
+}
+
+.shell__status {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-surface-sunken);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+.shell__status-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 4px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-subtle);
+  flex-shrink: 0;
+}
+
+.shell__status-dot--live {
+  background: var(--color-focus-ring);
+  animation: helmly-pulse 1.3s var(--ease-standard) infinite;
+}
+
+.shell__status-dot--idle {
+  background: var(--color-border-strong);
+}
+
+/* ------------------------------------------------------------- list pane */
+
+.shell__list {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+
+.shell__list-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.shell__list-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.shell__list-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-subtle);
+  flex-shrink: 0;
+}
+
+/* ----------------------------------------------------------- detail pane */
+
+.shell__detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--color-bg);
+}
+
+.shell__detail--wide {
+  padding: var(--space-6) var(--space-7);
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.page__title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.page__subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* --------------------------------------------------------- onboarding */
+
+.onboarding {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-bg);
+}
+
+.onboarding__card {
+  width: 100%;
+  max-width: 480px;
+  padding: var(--space-7);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.onboarding__log {
+  max-height: 340px;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}

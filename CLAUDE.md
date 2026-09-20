@@ -101,7 +101,7 @@ Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent
 "Copy & open" writes to the clipboard, calls `window.open`, and records a pending item ID. On `visibilitychange` back to the tab, it shows "Did you post it?". Shortcuts: j/k/c/e/r/d, shown as hints. Markdown editing uses a textarea with a react-markdown preview. Competitors and subreddits use chip inputs. Styling is only `tokens.css` (color, type, spacing, radius, light/dark), with no visual polish yet.
 
 ## Milestones (each ends runnable)
-**Progress:** Phase 1 complete (M1–M6 and the content policy). Next: Phase 2, M7 (frontend).
+**Progress:** Phase 1 complete (M1–M6 and the content policy). Phase 2 built (M7–M8); the product was renamed Sift → Helmly alongside it.
 
 **Phase 1: backend only.** Each milestone is exercised through the DRF API, the browsable API or admin, and pytest. docker-compose leaves out the frontend service until Phase 2.
 1. **Skeleton:** Django, DRF, Celery, beat, Postgres, Redis in docker-compose; session auth endpoints; `llm/` with prompt loader, `complete()`, cost logging, LangSmith; `.env.example`; README. Tests: prompt loader, cost calculation, structured parse and retry, refusal handling (SDK mocked).

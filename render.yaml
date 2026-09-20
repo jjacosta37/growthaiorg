@@ -1,4 +1,4 @@
-# Render Blueprint for Helmly (backend). The frontend static site is added in Phase 2.
+# Render Blueprint for Helmly: web, worker, beat, Redis, Postgres and the frontend static site.
 # Deploy: Render Dashboard → New → Blueprint → pick this repo. You're prompted for every `sync: false` value.
 # Plans can be changed in the Dashboard later; preDeployCommand and background workers need paid plans.
 
@@ -43,6 +43,11 @@ services:
           property: connectionString
       - key: DJANGO_SECRET_KEY
         generateValue: true
+      # The browser reaches the API through the static site's /api rewrite, so the
+      # Referer Django sees is the frontend's origin, not this service's. Set this to
+      # the frontend URL (e.g. https://helmly-frontend.onrender.com) or POSTs fail CSRF.
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
       # Secrets: prompted once here; the worker and beat read them from this service.
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -135,6 +140,26 @@ services:
           type: web
           name: helmly-web
           envVarKey: LANGSMITH_API_KEY
+
+  # The frontend. /api/* is rewritten to the web service so the browser sees one
+  # origin: Django's session cookie stays SameSite=Lax and no CORS is needed.
+  # This mirrors the Vite dev proxy, so dev and production behave the same way.
+  - name: helmly-frontend
+    type: web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /api/*
+        # Check this against the real helmly-web URL after the first deploy:
+        # Render appends a suffix if the service name is already taken.
+        destination: https://helmly-web.onrender.com/api/*
+      # SPA fallback, last so it doesn't swallow /api.
+      - type: rewrite
+        source: /*
+        destination: /index.html
 
   - name: helmly-redis
     type: keyvalue

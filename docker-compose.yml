@@ -1,4 +1,4 @@
-# Local development. The frontend service is added in Phase 2.
+# Local development: backend services plus the Vite dev server.
 x-backend: &backend
   build:
     context: ./backend
@@ -39,6 +39,21 @@ services:
   beat:
     <<: *backend
     command: celery -A config beat --loglevel=info
+
+  # Vite dev server. It proxies /api to `web`, so the browser sees one origin and
+  # Django's SameSite=Lax session cookie works without CORS.
+  frontend:
+    build: ./frontend
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      VITE_API_TARGET: http://web:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - web
 
   postgres:
     image: postgres:17

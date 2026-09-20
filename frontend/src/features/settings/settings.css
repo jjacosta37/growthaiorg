@@ -1,0 +1,62 @@
+/* Settings, from "Helmly - Settings.dc.html". */
+
+.packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.pack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.pack:hover {
+  border-color: var(--color-text-subtle);
+}
+
+/* The selected pack gets a 2px border, so pad 1px less to keep the box the same size. */
+.pack--active {
+  border: 2px solid var(--color-accent);
+  padding: 13px;
+  cursor: default;
+}
+
+.rule {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rule:last-of-type {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.rule__head {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rule-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: var(--text-sm);
+}

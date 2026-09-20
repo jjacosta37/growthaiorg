@@ -1,0 +1,181 @@
+/*
+  Helmly design tokens
+  Load Archivo (400/500/600) and IBM Plex Mono (400/500) before using these,
+  e.g. via Google Fonts:
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  Theme: defaults to light. [data-theme="dark"] overrides, and the system
+  setting is honored when no explicit data-theme is set (prefers-color-scheme).
+*/
+
+:root {
+  /* Colour — surfaces */
+  --color-bg: #fafafa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f4f4f5;
+
+  --color-border: #e4e4e7;
+  --color-border-strong: #d4d4d8;
+
+  /* Colour — text */
+  --color-text: #18181b;
+  --color-text-muted: #52525b;
+  --color-text-subtle: #a1a1aa;
+  --color-text-inverse: #ffffff;
+
+  /* Colour — accent */
+  --color-accent: #111111;
+  --color-accent-hover: #000000;
+  --color-accent-subtle: #f4f4f5;
+  --color-on-accent: #ffffff;
+
+  /* Colour — semantic */
+  --color-success: #15803d;
+  --color-success-subtle: #ecfdf3;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-subtle: #fef2f2;
+
+  --color-focus-ring: #2563eb;
+
+  /* Colour — channel identity */
+  --color-channel-reddit: #c2410c;
+  --color-channel-x: #4338ca;
+  --color-channel-content: #0f766e;
+
+  /* Colour — relevance score */
+  --color-score-high: #15803d;
+  --color-score-mid: #b45309;
+  --color-score-low: #71717a;
+
+  /* Type */
+  --font-sans: "Archivo", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.7;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Space (4px scale) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  /* Depth */
+  --shadow-sm: 0 1px 2px rgba(15, 15, 17, 0.06);
+  --shadow-md: 0 2px 8px rgba(15, 15, 17, 0.08), 0 1px 2px rgba(15, 15, 17, 0.06);
+  --shadow-lg: 0 8px 24px rgba(15, 15, 17, 0.12), 0 2px 6px rgba(15, 15, 17, 0.08);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-theme="dark"] {
+  --color-bg: #0b0b0c;
+  --color-surface: #151517;
+  --color-surface-raised: #1d1d20;
+  --color-surface-sunken: #000000;
+
+  --color-border: #2a2a2e;
+  --color-border-strong: #3f3f46;
+
+  --color-text: #f4f4f5;
+  --color-text-muted: #a1a1aa;
+  --color-text-subtle: #6b6b70;
+  --color-text-inverse: #0b0b0c;
+
+  --color-accent: #f4f4f5;
+  --color-accent-hover: #ffffff;
+  --color-accent-subtle: #1d1d20;
+  --color-on-accent: #0b0b0c;
+
+  --color-success: #4ade80;
+  --color-success-subtle: #0f2a1e;
+  --color-warning: #fbbf24;
+  --color-warning-subtle: #2a1d06;
+  --color-danger: #f87171;
+  --color-danger-subtle: #2a1212;
+
+  --color-focus-ring: #60a5fa;
+
+  --color-channel-reddit: #fb923c;
+  --color-channel-x: #818cf8;
+  --color-channel-content: #2dd4bf;
+
+  --color-score-high: #4ade80;
+  --color-score-mid: #fbbf24;
+  --color-score-low: #9c9ca3;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #0b0b0c;
+    --color-surface: #151517;
+    --color-surface-raised: #1d1d20;
+    --color-surface-sunken: #000000;
+
+    --color-border: #2a2a2e;
+    --color-border-strong: #3f3f46;
+
+    --color-text: #f4f4f5;
+    --color-text-muted: #a1a1aa;
+    --color-text-subtle: #6b6b70;
+    --color-text-inverse: #0b0b0c;
+
+    --color-accent: #f4f4f5;
+    --color-accent-hover: #ffffff;
+    --color-accent-subtle: #1d1d20;
+    --color-on-accent: #0b0b0c;
+
+    --color-success: #4ade80;
+    --color-success-subtle: #0f2a1e;
+    --color-warning: #fbbf24;
+    --color-warning-subtle: #2a1d06;
+    --color-danger: #f87171;
+    --color-danger-subtle: #2a1212;
+
+    --color-focus-ring: #60a5fa;
+
+    --color-channel-reddit: #fb923c;
+    --color-channel-x: #818cf8;
+    --color-channel-content: #2dd4bf;
+
+    --color-score-high: #4ade80;
+    --color-score-mid: #fbbf24;
+    --color-score-low: #9c9ca3;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+  }
+}

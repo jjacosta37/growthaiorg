@@ -1,19 +1,30 @@
 /**
- * First run: URL entry, then a live progress log.
+ * Create a project and read its website, then a live progress log.
+ *
+ * Naming the project and pointing at its site are one step: there is no separate
+ * create-project screen. The project is created on submit when the user has none, or
+ * when they asked for a new one (?new=1) — otherwise the current project is onboarded.
  *
  * From "Helmly - Onboarding.dc.html". Both the thin-content warning and the
  * no-readable-pages failure end on Context — failure is never a dead end.
  */
 
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Logo } from "../../components/brand";
 import { ProgressTimeline, type TimelineStep } from "../../components/feedback";
 import { Button, Field, TextInput } from "../../components/primitives";
 import { ApiError } from "../../lib/api";
-import { keys, useRunEvents, useRun, useStartOnboarding } from "../../lib/queries";
+import {
+  keys,
+  useCreateProject,
+  useProjects,
+  useRun,
+  useRunEvents,
+  useStartOnboarding,
+} from "../../lib/queries";
 import { isRunActive, type AgentRun } from "../../lib/types";
 
 export default function OnboardingPage() {
@@ -34,28 +45,39 @@ export default function OnboardingPage() {
 function StartForm({ onStarted }: { onStarted: (runId: number) => void }) {
   const [url, setUrl] = useState("");
   const [name, setName] = useState("");
+  const [params] = useSearchParams();
+  const projects = useProjects();
+  const createProject = useCreateProject();
   const start = useStartOnboarding();
 
-  const submit = (event: FormEvent) => {
+  // Create a project first when there is none to onboard, or when the switcher asked for
+  // a new one. Otherwise this onboards whichever project is currently selected.
+  const needsProject = params.get("new") === "1" || projects.data?.length === 0;
+
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     const website_url = url.trim();
     if (!website_url) return;
+
+    if (needsProject) {
+      await createProject.mutateAsync({ name: name.trim() || undefined });
+    }
     start.mutate(
       { website_url, name: name.trim() || undefined },
       { onSuccess: (run) => onStarted(run.id) },
     );
   };
 
-  const fieldError = start.error instanceof ApiError ? start.error.fieldErrors : {};
+  const failure = start.error ?? createProject.error;
+  const fieldError = failure instanceof ApiError ? failure.fieldErrors : {};
   const detail =
-    start.error instanceof ApiError && !Object.keys(fieldError).length
-      ? start.error.detail
-      : null;
+    failure instanceof ApiError && !Object.keys(fieldError).length ? failure.detail : null;
+  const busy = createProject.isPending || start.isPending;
 
   return (
     <form onSubmit={submit} className="stack" style={{ gap: "var(--space-5)" }}>
       <div className="stack" style={{ gap: "var(--space-2)", textAlign: "center" }}>
-        <h1 className="page__title">Let's read your website</h1>
+        <h1 className="page__title">Let's create your Project</h1>
         <p className="muted">
           Helmly crawls your site and writes the context documents its agents work from.
         </p>
@@ -67,19 +89,30 @@ function StartForm({ onStarted }: { onStarted: (runId: number) => void }) {
         </div>
       )}
 
+      <Field
+        label="Project name"
+        hint="Optional — Helmly names it from your site if you leave this blank."
+        htmlFor="name"
+        error={fieldError.name}
+      >
+        <TextInput
+          id="name"
+          autoFocus
+          placeholder="Acme"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          invalid={!!fieldError.name}
+        />
+      </Field>
+
       <Field label="Website URL" htmlFor="website_url" error={fieldError.website_url}>
         <TextInput
           id="website_url"
           placeholder="https://example.com"
-          autoFocus
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           invalid={!!fieldError.website_url}
         />
-      </Field>
-
-      <Field label="Product name" hint="Optional — Helmly works it out from the site." htmlFor="name">
-        <TextInput id="name" value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
 
       <Button
@@ -87,7 +120,7 @@ function StartForm({ onStarted }: { onStarted: (runId: number) => void }) {
         variant="primary"
         size="lg"
         block
-        loading={start.isPending}
+        loading={busy}
         disabled={!url.trim()}
       >
         Start

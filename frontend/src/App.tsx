@@ -7,7 +7,6 @@ import { DetailSkeleton } from "./components/feedback";
 import { setProjectId, setUnauthenticatedHandler } from "./lib/api";
 import { keys, useMe, useProject, useProjects } from "./lib/queries";
 import LoginPage from "./features/auth/LoginPage";
-import NewProjectPage from "./features/onboarding/NewProjectPage";
 import OnboardingPage from "./features/onboarding/OnboardingPage";
 import InboxPage from "./features/inbox/InboxPage";
 import AgentPage from "./features/agents/AgentPage";
@@ -33,7 +32,9 @@ export default function App() {
 
   const signedIn = !!me.data;
   const projects = useProjects(signedIn);
-  const project = useProject(signedIn);
+  // /api/project/ 409s when the user owns none, so don't ask until we know there is one.
+  const hasAny = (projects.data?.length ?? 0) > 0;
+  const project = useProject(signedIn && hasAny);
 
   // Keep the X-Project-Id header in step with what the server says is selected, so a
   // reload resumes on the same project rather than the first one.
@@ -48,14 +49,10 @@ export default function App() {
   const needsOnboarding =
     signedIn && !hasNoProject && project.isSuccess && !project.data.onboarded_at;
 
+  // Naming a project and crawling its site are one screen, so both states land on
+  // /onboarding: with no project it creates one, otherwise it onboards the current one.
   useEffect(() => {
-    if (hasNoProject && location.pathname !== "/projects/new") {
-      navigate("/projects/new", { replace: true });
-    } else if (
-      needsOnboarding &&
-      location.pathname !== "/onboarding" &&
-      location.pathname !== "/projects/new"
-    ) {
+    if ((hasNoProject || needsOnboarding) && location.pathname !== "/onboarding") {
       navigate("/onboarding", { replace: true });
     }
   }, [hasNoProject, needsOnboarding, location.pathname, navigate]);
@@ -70,7 +67,6 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/projects/new" element={<NewProjectPage first={hasNoProject} />} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route element={<Shell />}>
         <Route path="/inbox" element={<InboxPage />} />

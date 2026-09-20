@@ -204,7 +204,7 @@ function ProjectSwitcher({ name, url }: { name?: string; url?: string }) {
           },
         })),
         "separator" as const,
-        { label: "New project…", onSelect: () => navigate("/projects/new") },
+        { label: "New project…", onSelect: () => navigate("/onboarding?new=1") },
         { label: "Settings", onSelect: () => navigate("/settings") },
       ]}
     />

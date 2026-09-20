@@ -1,4 +1,4 @@
-"""Sift is a platform for any company. Active prompts, the guardrails and application code must not
+"""Helmly is a platform for any company. Active prompts, the guardrails and application code must not
 bake in any customer or industry; industry specifics belong in policies/*.yaml (data)."""
 
 import re

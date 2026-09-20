@@ -63,7 +63,7 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {"default": env.db("DATABASE_URL", default="postgres://sift:sift@localhost:5433/sift")}
+DATABASES = {"default": env.db("DATABASE_URL", default="postgres://helmly:helmly@localhost:5433/helmly")}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LANGUAGE_CODE = "en-us"
@@ -82,7 +82,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
 }
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Sift API",
+    "TITLE": "Helmly API",
     "VERSION": "0.1.0",
     # Stable enum names for the generated frontend types (instead of Status393Enum and similar).
     "ENUM_NAME_OVERRIDES": {

@@ -8,6 +8,7 @@ from apps.context import tasks
 from apps.context.models import ContextDocument, CrawledPage
 from apps.core.models import Project
 from llm.models import LLMCall
+from llm.prompts import available_versions
 from providers.crawl import CrawledPageData, CrawlResult
 from tests.fakes import message, schema_title, task_system
 
@@ -88,7 +89,8 @@ def test_full_onboarding(project, fake_anthropic, monkeypatch):
     assert CrawledPage.objects.filter(project=project).count() == 5
     docs = {d.kind: d for d in ContextDocument.objects.filter(project=project)}
     assert set(docs) == {"product", "audience", "brand_voice", "competitors", "content_strategy", "compliance"}
-    assert docs["product"].source == "ai" and docs["product"].prompt_version == "v1"
+    latest_product = f"v{available_versions('context.product')[-1]}"
+    assert docs["product"].source == "ai" and docs["product"].prompt_version == latest_product
     assert docs["compliance"].source == "template" and docs["compliance"].prompt_version == "pack:health_wellness"
     assert "Acme Fit" in docs["compliance"].content_md and "No medical claims" in docs["compliance"].content_md
     assert docs["product"].revisions.count() == 1

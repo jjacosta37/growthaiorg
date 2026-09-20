@@ -32,7 +32,7 @@ blog_disclaimer: ""
 compliance_doc: |
   # Compliance Guidelines
 
-  These rules apply to everything Sift drafts for {{ project_name }}. They're a starting template, not legal
+  These rules apply to everything Helmly drafts for {{ project_name }}. They're a starting template, not legal
   advice: review them and edit them to fit your industry and jurisdiction.
 
   ## Hard rules

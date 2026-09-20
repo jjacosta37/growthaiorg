@@ -7,7 +7,7 @@ x-backend: &backend
   env_file: .env
   environment:
     DJANGO_SETTINGS_MODULE: config.settings.dev
-    DATABASE_URL: postgres://sift:sift@postgres:5432/sift
+    DATABASE_URL: postgres://helmly:helmly@postgres:5432/helmly
     REDIS_URL: redis://redis:6379/0
   volumes:
     - ./backend:/app
@@ -43,15 +43,15 @@ services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_USER: sift
-      POSTGRES_PASSWORD: sift
-      POSTGRES_DB: sift
+      POSTGRES_USER: helmly
+      POSTGRES_PASSWORD: helmly
+      POSTGRES_DB: helmly
     ports:
       - "5433:5432"  # host 5433 to avoid clashing with a local Postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sift"]
+      test: ["CMD-SHELL", "pg_isready -U helmly"]
       interval: 3s
       retries: 20
 

@@ -23,11 +23,11 @@ def score_prompt(prompts_tmp):
 
 
 def test_structured_output_parsed_and_logged(score_prompt, fake_anthropic, settings):
-    fake = fake_anthropic(message('{"ok": true, "echo": "sift"}', usage_=usage(5000, 50, cache_read=4000)))
+    fake = fake_anthropic(message('{"ok": true, "echo": "helm"}', usage_=usage(5000, 50, cache_read=4000)))
 
-    result = llm.complete("t.score", {"word": "sift"})
+    result = llm.complete("t.score", {"word": "helm"})
 
-    assert result.parsed.ok is True and result.parsed.echo == "sift"
+    assert result.parsed.ok is True and result.parsed.echo == "helm"
     call = LLMCall.objects.get()
     assert call.status == "ok"
     assert call.model == settings.LLM_MODELS["fast"]
@@ -39,7 +39,7 @@ def test_structured_output_parsed_and_logged(score_prompt, fake_anthropic, setti
     fmt = params["output_config"]["format"]
     assert fmt["type"] == "json_schema" and fmt["schema"]["additionalProperties"] is False
     assert "effort" not in params["output_config"]  # Haiku rejects effort; only sent when set
-    assert params["messages"] == [{"role": "user", "content": "Word: sift"}]
+    assert params["messages"] == [{"role": "user", "content": "Word: helm"}]
 
 
 def test_context_block_is_first_and_cached(score_prompt, fake_anthropic):

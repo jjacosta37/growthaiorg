@@ -8,15 +8,15 @@ from config.settings.base import env
 
 
 class Command(BaseCommand):
-    help = "Create the admin user (from SIFT_ADMIN_* env vars) and the default project."
+    help = "Create the admin user (from HELMLY_ADMIN_* env vars) and the default project."
 
     def handle(self, *args, **options):
-        username = env("SIFT_ADMIN_USERNAME", default="")
-        password = env("SIFT_ADMIN_PASSWORD", default="")
-        email = env("SIFT_ADMIN_EMAIL", default="")
+        username = env("HELMLY_ADMIN_USERNAME", default="")
+        password = env("HELMLY_ADMIN_PASSWORD", default="")
+        email = env("HELMLY_ADMIN_EMAIL", default="")
         User = get_user_model()
         if not (username and password):
-            self.stdout.write("SIFT_ADMIN_USERNAME/SIFT_ADMIN_PASSWORD not set; skipping admin user")
+            self.stdout.write("HELMLY_ADMIN_USERNAME/HELMLY_ADMIN_PASSWORD not set; skipping admin user")
         elif not User.objects.filter(username=username).exists():
             User.objects.create_superuser(username=username, email=email, password=password)
             self.stdout.write(f"Created admin user {username}")

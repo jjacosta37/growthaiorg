@@ -1,9 +1,9 @@
-# CLAUDE.md — Sift
+# CLAUDE.md — Helmly
 
 Working agreement for this repo. The approved plan follows below; keep it up to date as milestones land.
 
 ## Conventions
-- **Platform, not bespoke.** Sift is built as a product for any company. Never put customer-specific or industry-specific logic, names or examples in code, prompts, tests or docs. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts and code. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
+- **Platform, not bespoke.** Helmly is built as a product for any company. Never put customer-specific or industry-specific logic, names or examples in code, prompts, tests or docs. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts and code. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
 - Stack is fixed: Django + DRF + Postgres, Celery + beat + Redis, Vite React TS, `anthropic` SDK. No LangChain/LangGraph/Agent SDK.
 - **Only `backend/llm/` imports `anthropic`.** Pipelines call `llm.complete(...)` / `llm.batch.*`.
 - Model IDs come from `settings.LLM_MODELS` (`fast` = `claude-haiku-4-5-20251001`, `writer` = `claude-sonnet-5`). Never hardcode.
@@ -14,10 +14,10 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
 - Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands. The token names, components and screens are specified in `docs/design-brief.md` (the Claude Design brief); build against those names.
 
-# Sift — implementation plan
+# Helmly — implementation plan
 
 ## Context
-Sift is an AI growth assistant (single user for now) for a company's marketing. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
+Helmly is an AI growth assistant (single user for now) for a company's marketing. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
 
 **How this differs from the existing code:** the repo has one commit containing a 1-line `README.md`. Nothing was built from the earlier spec, so there's nothing to reconcile. This is a greenfield build.
 

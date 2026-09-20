@@ -10,7 +10,7 @@ class Command(BaseCommand):
     help = "Call the fast model once through llm.complete() and print the logged LLMCall."
 
     def handle(self, *args, **options):
-        result = llm.complete("smoke", {"word": "sift"})
+        result = llm.complete("smoke", {"word": "helm"})
         call = result.call
         self.stdout.write(self.style.SUCCESS(f"parsed={result.parsed!r}"))
         self.stdout.write(

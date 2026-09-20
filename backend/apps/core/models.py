@@ -2,7 +2,7 @@ from django.db import models
 
 
 class Project(models.Model):
-    """The product Sift is growing. Single-user today; every domain row hangs off a project."""
+    """The product Helmly is growing. Single-user today; every domain row hangs off a project."""
 
     name = models.CharField(max_length=120)
     website_url = models.URLField(blank=True)

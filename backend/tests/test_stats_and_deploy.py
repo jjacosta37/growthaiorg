@@ -1,8 +1,11 @@
+import importlib
 from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.test import override_settings
+from django.urls import clear_url_caches
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -93,6 +96,24 @@ def test_stats_empty_and_bad_params(client):
 def test_health_is_public():
     resp = APIClient().get("/api/health/")
     assert resp.status_code == 200 and resp.json() == {"ok": True}
+
+
+def test_api_docs_routes_follow_the_setting():
+    """Served where we ask for them, absent otherwise — prod defaults to off (config/settings/prod.py)."""
+    from django.urls import NoReverseMatch, reverse
+
+    assert reverse("docs") == "/api/docs/" and reverse("schema") == "/api/schema/"
+
+    with override_settings(API_DOCS_ENABLED=False, ROOT_URLCONF="config.urls"):
+        clear_url_caches()
+        importlib.reload(importlib.import_module("config.urls"))
+        try:
+            with pytest.raises(NoReverseMatch):
+                reverse("docs")
+            assert APIClient().get("/api/schema/").status_code == 404
+        finally:
+            importlib.reload(importlib.import_module("config.urls"))
+            clear_url_caches()
 
 
 def test_openapi_schema_generates_cleanly():

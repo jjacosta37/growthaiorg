@@ -84,6 +84,9 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "EXCEPTION_HANDLER": "config.exceptions.exception_handler",
 }
+# The schema and Swagger UI are unauthenticated by drf-spectacular's default, so they are served
+# only where that is wanted: on by default for local work and CI, off in prod (see prod.py).
+API_DOCS_ENABLED = env.bool("DJANGO_API_DOCS", default=True)
 SPECTACULAR_SETTINGS = {
     "TITLE": "Helmly API",
     "VERSION": "0.1.0",

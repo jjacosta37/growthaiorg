@@ -54,6 +54,7 @@ A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `w
 - Admin (LLM call log, batches, periodic tasks): http://localhost:8000/admin/
 - The app: http://localhost:5173
 - API docs (Swagger): http://localhost:8000/api/docs/. Log in first via http://localhost:8000/admin/.
+  These pages are unauthenticated, so prod doesn't serve them; set `DJANGO_API_DOCS=true` to enable them on a staging service.
 - Real API smoke test: `docker compose exec web python manage.py llm_smoke`
 
 <details>

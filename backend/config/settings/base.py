@@ -2,6 +2,8 @@ from pathlib import Path
 
 import environ
 
+from config.observability import init_sentry
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 env = environ.Env()
@@ -80,6 +82,7 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 50,
+    "EXCEPTION_HANDLER": "config.exceptions.exception_handler",
 }
 SPECTACULAR_SETTINGS = {
     "TITLE": "Helmly API",
@@ -135,13 +138,34 @@ LANGSMITH_TRACING = env.bool("LANGSMITH_TRACING", default=False)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "formatters": {
+        # Render's log view shows one line per record with no metadata of its own, so the
+        # line has to carry its own timestamp, level and source.
+        "console": {
+            "format": "%(asctime)s %(levelname)-7s %(name)s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "console"}},
     "root": {"handlers": ["console"], "level": env("LOG_LEVEL", default="INFO")},
     "loggers": {
         "trafilatura": {"level": "ERROR"},  # warns "discarding data" for every thin page
         "httpx": {"level": "WARNING"},
+        # Django logs handled 5xx here; without this they are rendered but never printed.
+        "django.request": {"level": "ERROR"},
     },
 }
+
+# Error reporting (Sentry). Unset DSN = disabled, which is the default everywhere but prod.
+ENVIRONMENT = env("ENVIRONMENT", default="dev")
+SENTRY_DSN = env("SENTRY_DSN", default="")
+SENTRY_ENABLED = init_sentry(
+    dsn=SENTRY_DSN,
+    environment=ENVIRONMENT,
+    # Render sets RENDER_GIT_COMMIT on every service; it gives Sentry release tracking free.
+    release=env("RENDER_GIT_COMMIT", default=None),
+    local_variables=env.bool("SENTRY_LOCAL_VARIABLES", default=False),
+)
 
 # Onboarding crawl
 CRAWL_MAX_PAGES = env.int("CRAWL_MAX_PAGES", default=40)

@@ -67,7 +67,7 @@ class ApifyRenderer:
         try:
             run = self.client.actor(self.actor_id).call(run_input=self.build_input(urls), run_timeout=self.timeout)
         except Exception as exc:  # network/auth/actor errors: degrade to unrendered pages
-            log.warning("apify render failed: %s", exc)
+            log.warning("apify render failed: %s", exc, exc_info=True)
             result.error = f"{type(exc).__name__}: {exc}"
             return result
         if run is None:

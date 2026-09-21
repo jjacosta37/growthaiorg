@@ -14,6 +14,26 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
 - Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands. The token names, components and screens are specified in `docs/design-brief.md` (the Claude Design brief); build against those names.
 
+## Logging and error reporting
+
+Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.
+
+- **One logger per module:** `log = logging.getLogger(__name__)`. Never `print`, never the root logger, never a logger named by hand.
+- **Levels carry meaning — they are the routing table, not decoration:**
+  - `ERROR` — a flow failed and someone needs to know. Files a Sentry issue automatically, from any logger except the two `init_sentry` ignores by name (`apps.api`, which `DjangoIntegration` already covers, and `apps.agents.runs.events`, which reports through `RunReporter` instead). Don't add to that list without replacing the reporting some other way.
+  - `WARNING` — degraded but carried on. Log stream and Sentry breadcrumb only.
+  - `INFO` — milestones of a mission-critical flow: what started, what it decided, what it produced, plus the identifiers needed to find the rows.
+  - `DEBUG` — not used in shipped code paths.
+- **Inside a pipeline, report through `RunReporter`, not the logger.** `reporter.step/success/warning/error` writes the `RunEvent` the UI reads, mirrors it to the log at the matching level, and leaves a Sentry breadcrumb. A bare `log.info` inside a pipeline is invisible to the user.
+- **Pass the exception: `reporter.error(msg, exc=exc)`.** Whenever one is in hand, it is what gets reported, and it groups by exception type and stack instead of by interpolated message text. Without `exc` nothing is reported — correct for an aggregate ("3 posts couldn't be scored"), wrong for a caught exception.
+- **`reporter.warning` never files an issue**, by design. Use it for degradation the run tolerated; use `error` when a step was abandoned.
+- **Never swallow an exception silently.** A caught exception is either reported with `exc=`, or logged with `exc_info=True`. `except Exception: pass` is not acceptable, and neither is logging only `str(exc)` where a traceback was available.
+- **Log identifiers, never content.** Project/draft/run/page ids, URLs, counts, durations, costs — yes. Crawled page text, draft bodies, context documents, prompts, API keys — never. Sentry is configured with no PII, no request bodies and no frame locals for this reason (`backend/config/observability.py`); don't reintroduce the leak by hand.
+- **Flows that must log:** every agent run's start, each step and its outcome; every external call (LLM, Apify, crawl) with its result; every Celery task that runs outside `running()`; anything that spends money or writes something a user will see.
+- **Spend and usage go to the database, not the log.** `LLMCall` and `ExternalUsage` are the record; `apps/stats/` reads them. A log line about cost is for debugging only, never the source of truth.
+- **Tests never reach Sentry** (no DSN in `config.settings.test`). Assert on `RunEvent` rows and `run.stats` for domain failures, and use `caplog` for log level. See `backend/tests/test_observability.py`.
+- **The frontend reports nothing** (decided, not overlooked). `ErrorBoundary` in `frontend/src/components/feedback.tsx` stops a render throw from blanking the app and writes to the viewer's console; nothing leaves the browser. API failures are still covered, because the 500 is reported server-side. Client-side JS errors — a throw in an event handler, an unhandled rejection — leave no trace. Closing that means `@sentry/react` plus source-map upload, or the stack traces are minified and useless.
+
 # Helmly — implementation plan
 
 ## Context

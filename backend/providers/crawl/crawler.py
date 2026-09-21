@@ -70,6 +70,7 @@ class Crawler:
             log.info("crawl: GET %s failed: %s", url, exc)
             return None
         if len(resp.content) > MAX_BYTES:
+            log.info("crawl: skipping %s, %s bytes over the %s limit", url, len(resp.content), MAX_BYTES)
             return None
         return resp
 

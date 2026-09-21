@@ -236,7 +236,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
     try:
         identify_project(project, run, reporter, site_block)
     except llm.LLMError as exc:
-        reporter.error(f"Couldn't identify the product: {exc}")
+        reporter.error(f"Couldn't identify the product: {exc}", exc=exc)
 
     for kind in AI_DOCS:
         title = DocKind(kind).label
@@ -248,7 +248,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
             generate_document(project, kind, run, site_block)
             reporter.success(f"Wrote {title}")
         except llm.LLMError as exc:
-            reporter.error(f"Couldn't write {title}: {exc}")
+            reporter.error(f"Couldn't write {title}: {exc}", exc=exc)
 
     if not is_human_edited(project, DocKind.COMPLIANCE):  # keep it in sync with the policy
         write_compliance_doc(project)
@@ -260,7 +260,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
         try:
             fn()
         except llm.LLMError as exc:
-            reporter.error(f"{label} failed: {exc}")
+            reporter.error(f"{label} failed: {exc}", exc=exc)
 
     if project.onboarded_at is None:
         project.onboarded_at = timezone.now()

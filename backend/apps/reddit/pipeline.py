@@ -117,15 +117,18 @@ def fail_score(post: RedditPost, error: str, call=None) -> None:
 
 def score_sync(run, reporter, posts: list[RedditPost]) -> None:
     reporter.step(f"Scoring {len(posts)} posts")
+    last_exc = None
     for post in posts:
         try:
             result = llm.complete("reddit.score", post_variables(post), project=run.project, run=run)
             apply_score(post, result.parsed, result.call)
         except llm.LLMError as exc:
             fail_score(post, str(exc), exc.call)
+            last_exc = exc
     failed = sum(p.score_status == RedditPost.ScoreStatus.FAILED for p in posts)
     if failed:
-        reporter.error(f"{failed} post(s) couldn't be scored")
+        # One report for the batch, not one per post: they fail for the same reason.
+        reporter.error(f"{failed} post(s) couldn't be scored", exc=last_exc)
 
 
 def submit_scoring_batch(run, reporter, posts: list[RedditPost]) -> None:
@@ -183,7 +186,7 @@ def draft_replies(run, reporter, cfg: RedditAgentConfig, posts: list[RedditPost]
         try:
             result = llm.complete("reddit.comment", comment_variables(post, run.project), project=run.project, run=run)
         except llm.LLMError as exc:
-            reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {exc}")
+            reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {exc}", exc=exc)
             continue
         draft = services.create_draft(run.project, agent_type=AgentType.REDDIT, kind=DraftKind.REDDIT_COMMENT,
                                       content={"body": result.parsed.body}, result=result, run=run,

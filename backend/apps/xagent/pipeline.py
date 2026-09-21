@@ -110,7 +110,7 @@ def run_x_agent(run: AgentRun, reporter: RunReporter) -> None:
                                      "Keep the idea; cut words, not substance.")
                 item = {**item, "posts": clean_posts(item_result.parsed.posts, cfg.max_thread_posts) or item["posts"]}
             except llm.LLMError as exc:
-                reporter.error(f"Couldn't shorten a post: {exc}")
+                reporter.error(f"Couldn't shorten a post: {exc}", exc=exc)
                 item_result = result
             if over_limit(item["posts"], cfg.char_limit):
                 stats["over_limit"] += 1

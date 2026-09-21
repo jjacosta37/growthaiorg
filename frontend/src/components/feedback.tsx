@@ -1,6 +1,7 @@
 /** Empty, error and loading states; toasts; dialogs; menus; the progress timeline. */
 
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
@@ -8,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ErrorInfo,
   type ReactNode,
 } from "react";
 
@@ -45,6 +47,30 @@ export function ErrorState({
       )}
     </div>
   );
+}
+
+/** Catches render-time throws. Without it any one of them blanks the whole app silently. */
+export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Unhandled render error", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <ErrorState
+        title="Something broke"
+        body={this.state.error.message}
+        onRetry={() => window.location.reload()}
+      />
+    );
+  }
 }
 
 export function Skeleton({

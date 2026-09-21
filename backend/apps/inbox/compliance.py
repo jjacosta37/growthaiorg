@@ -45,7 +45,13 @@ def lint(draft: Draft, run=None) -> list[dict]:
         deterministic_rules = {f["rule"] for f in flags}
         flags += [f.model_dump() for f in result.parsed.flags if f.rule not in deterministic_rules]
     except llm.LLMError as exc:
-        log.warning("compliance lint failed for draft %s: %s", draft.pk, exc)
+        # Never blocks the draft, but it must not be invisible either: without the run
+        # warning the only trace of a failed lint was a line in the worker's stdout.
+        log.warning("compliance lint failed for draft %s: %s", draft.pk, exc, exc_info=True)
+        if run is not None:
+            from apps.agents.runs import RunReporter  # local: apps.agents imports apps.inbox
+
+            RunReporter(run).warning(f"Compliance lint failed for draft {draft.pk}: {exc}", exc=exc)
     draft.compliance_flags = flags
     draft.save(update_fields=["compliance_flags", "updated_at"])
     return flags

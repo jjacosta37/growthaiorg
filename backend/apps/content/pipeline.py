@@ -95,7 +95,7 @@ def draft_post(run: AgentRun, reporter: RunReporter, topic: BlogTopic, cfg: Cont
     try:
         result = llm.complete("content.post", post_variables(run.project, topic, cfg), project=run.project, run=run)
     except llm.LLMError as exc:
-        reporter.error(f"Couldn't write “{topic.title[:70]}”: {exc}")
+        reporter.error(f"Couldn't write “{topic.title[:70]}”: {exc}", exc=exc)
         return None
     content = finalize_post(result.parsed, policy_for(run.project).blog_disclaimer)
     draft = services.create_draft(run.project, agent_type=AgentType.CONTENT, kind=DraftKind.BLOG_POST,

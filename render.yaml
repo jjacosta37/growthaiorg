@@ -19,6 +19,12 @@ envVarGroups:
         value: "false"
       - key: LANGSMITH_PROJECT
         value: helmly
+      - key: ENVIRONMENT
+        value: production
+      # Sentry error reporting. Prompted once here, so web, worker and beat all report
+      # into the same project. Leave it blank to run with error reporting off.
+      - key: SENTRY_DSN
+        sync: false
 
 services:
   - name: helmly-web

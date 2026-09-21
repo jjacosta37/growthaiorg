@@ -148,6 +148,26 @@ cd backend && ../.venv/bin/pytest
 | `REDDIT_SOURCE` | `apify` (default) or `fake` for local testing without Apify spend |
 | `LLM_BATCH_POLL_SECONDS` | How often scheduled runs check their scoring batch (default 120) |
 | `CRAWL_MAX_PAGES`, `CRAWL_DELAY_SECONDS` | Onboarding crawl limits (default 40 pages, 0.2s between requests) |
+| `SENTRY_DSN` | Error reporting. Blank (the default) disables it entirely |
+| `ENVIRONMENT` | Tags reported errors (`dev`, `production`) |
+| `SENTRY_LOCAL_VARIABLES` | Include frame locals in tracebacks. Off by default: locals can hold crawled page text and draft bodies |
+| `LOG_LEVEL` | Root logger level (default `INFO`) |
+
+## Error reporting
+
+Unhandled exceptions — in a view, a Celery task, or an agent pipeline — go to Sentry when
+`SENTRY_DSN` is set. Sentry's free Developer plan (5k errors/month, 1 user, unlimited
+projects) is enough for one deployment.
+
+- Errors only: `traces_sample_rate` is 0, and performance monitoring is off. LangSmith
+  covers the LLM-side timing.
+- Pipeline failures are tagged `agent_run_id`, `kind`, `trigger` and `project_id`, so an
+  issue points straight at a run. The run's `RunEvent` trail rides along as breadcrumbs.
+- A failing run is *not* re-raised — `AgentRun.status` is what the UI reads, and beat calls
+  the agent task synchronously. `AgentRun.error` holds the full traceback for the UI, and
+  Sentry gets the same exception.
+- Nothing is sent without a DSN, so tests and local runs stay offline. Privacy settings are
+  in `backend/config/observability.py`: no PII, no request bodies, no frame locals.
 
 ## Content policy (industry rules as data)
 
@@ -171,6 +191,8 @@ Everything goes through `backend/llm/`. Pipelines call `llm.complete("task.name"
 2. In Render: **New → Blueprint**, then pick the repo and branch. Render prompts once for each secret on `helmly-web`:
    - `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, and optionally `LANGSMITH_API_KEY` (set `LANGSMITH_TRACING=true` in the `helmly-shared` group to turn tracing on)
    - `HELMLY_ADMIN_USERNAME`, `HELMLY_ADMIN_PASSWORD`, `HELMLY_ADMIN_EMAIL`, for the single admin user
+   - `SENTRY_DSN` on the `helmly-shared` group, so web, worker and beat all report into one
+     project. Leave it blank to deploy with error reporting off.
 
    `helmly-worker` and `helmly-beat` read those same secrets from `helmly-web`, and `DJANGO_SECRET_KEY` is generated.
 3. Every deploy runs `migrate` and `bootstrap` (idempotent) before the new version goes live. The health check is `/api/health/`.

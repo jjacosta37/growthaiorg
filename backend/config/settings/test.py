@@ -1,7 +1,11 @@
 import logging
 import os
 
-from .base import *  # noqa: F403
+# Sentry is initialised while base is imported, so this has to be set first: a developer's
+# .env may carry a real DSN, and tests deliberately raise exceptions all over the place.
+os.environ["SENTRY_DSN"] = ""
+
+from .base import *  # noqa: E402, F403
 
 SECRET_KEY = "test"
 ANTHROPIC_API_KEY = "test-key"

@@ -1,0 +1,14 @@
+# Production: build the static bundle, then serve it with Caddy. Node isn't in the final image.
+# /api is not handled here: the host's reverse proxy sends it to the backend on the same
+# origin (see Caddyfile.prod).
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM caddy:2.11-alpine
+COPY Caddyfile.prod /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+EXPOSE 80

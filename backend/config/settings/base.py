@@ -167,8 +167,9 @@ SENTRY_DSN = env("SENTRY_DSN", default="")
 SENTRY_ENABLED = init_sentry(
     dsn=SENTRY_DSN,
     environment=ENVIRONMENT,
-    # Render sets RENDER_GIT_COMMIT on every service; it gives Sentry release tracking free.
-    release=env("RENDER_GIT_COMMIT", default=None),
+    # The deployed commit, for Sentry release tracking: Render sets RENDER_GIT_COMMIT on every
+    # service, and the self-hosted compose file passes SENTRY_RELEASE.
+    release=env("SENTRY_RELEASE", default=None) or env("RENDER_GIT_COMMIT", default=None),
     local_variables=env.bool("SENTRY_LOCAL_VARIABLES", default=False),
 )
 

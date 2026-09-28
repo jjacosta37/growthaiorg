@@ -1,6 +1,6 @@
 /**
  * Context: product summary, competitors, the six documents as tabs, re-crawl and
- * the crawled-pages list. From "Helmly - Context.dc.html".
+ * the crawled-pages list. From "Luka - Context.dc.html".
  */
 
 import { useState } from "react";
@@ -40,7 +40,7 @@ const DOC_ORDER: DocKind[] = [
 ];
 
 const SOURCE_LABEL: Record<DocSource, string> = {
-  ai: "Written by Helmly",
+  ai: "Written by Luka",
   human: "Edited by you",
   template: "From your content policy",
 };
@@ -103,7 +103,7 @@ export default function ContextPage() {
             <div className="card__body">
               <EmptyState
                 title="No documents yet"
-                body="Run onboarding to have Helmly read your site."
+                body="Run onboarding to have Luka read your site."
               />
             </div>
           )}
@@ -348,7 +348,7 @@ function RecrawlDialog({ open, onClose }: { open: boolean; onClose: () => void }
       onConfirm={() => start(false)}
     >
       <p className="dialog__text">
-        Helmly reads your site again and rewrites the documents it generated.
+        Luka reads your site again and rewrites the documents it generated.
       </p>
       {edited.length > 0 && (
         <>

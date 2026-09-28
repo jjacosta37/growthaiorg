@@ -251,7 +251,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     response = await fetch(buildUrl(path, options.query), init);
   } catch (cause) {
     // Network-level failure: the API is unreachable. Status 0 drives the offline banner.
-    throw new ApiError(0, null, "Can't reach Helmly");
+    throw new ApiError(0, null, "Can't reach Luka");
   }
 
   if (response.status === 204) return undefined as T;

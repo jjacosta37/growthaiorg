@@ -1,6 +1,6 @@
 /**
  * The inbox: filter header, list rows, detail pane, keyboard shortcuts.
- * From "Helmly - App Shell.dc.html".
+ * From "Luka - App Shell.dc.html".
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

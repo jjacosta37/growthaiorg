@@ -2,7 +2,7 @@
  * The detail pane: renderer per kind, plus the shared actions bar, compliance flags,
  * version history and the "Did you post it?" prompt.
  *
- * From "Helmly - Detail Panes.dc.html".
+ * From "Luka - Detail Panes.dc.html".
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

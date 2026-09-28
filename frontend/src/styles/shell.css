@@ -1,4 +1,4 @@
-/* The three-pane app shell, from "Helmly - App Shell.dc.html". Desktop-first, min 1024px. */
+/* The three-pane app shell, from "Luka - App Shell.dc.html". Desktop-first, min 1024px. */
 
 .shell {
   display: flex;
@@ -129,7 +129,7 @@
 
 .shell__status-dot--live {
   background: var(--color-focus-ring);
-  animation: helmly-pulse 1.3s var(--ease-standard) infinite;
+  animation: luka-pulse 1.3s var(--ease-standard) infinite;
 }
 
 .shell__status-dot--idle {

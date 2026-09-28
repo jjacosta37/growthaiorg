@@ -108,7 +108,7 @@ pre {
 }
 
 /* Shared animations, referenced by the running status dot and the skeletons. */
-@keyframes helmly-pulse {
+@keyframes luka-pulse {
   0%,
   100% {
     opacity: 1;
@@ -118,7 +118,7 @@ pre {
   }
 }
 
-@keyframes helmly-shimmer {
+@keyframes luka-shimmer {
   0% {
     background-position: -200px 0;
   }
@@ -127,7 +127,7 @@ pre {
   }
 }
 
-@keyframes helmly-spin {
+@keyframes luka-spin {
   to {
     transform: rotate(360deg);
   }

@@ -1,4 +1,4 @@
-/** Buttons, keyboard hints, form controls. Ported from "Helmly Components.dc.html". */
+/** Buttons, keyboard hints, form controls. Ported from "Luka Components.dc.html". */
 
 import {
   forwardRef,

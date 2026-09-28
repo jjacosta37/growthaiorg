@@ -1,10 +1,10 @@
-/** Public landing page — from the Claude Design handoff "Helmly - Landing Page.dc.html".
+/** Public landing page — from the Claude Design handoff "Luka - Landing Page.dc.html".
  *  Its only job is waitlist signups; copy is final and used verbatim. */
 
 import { useEffect, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import { HelmMark } from "../../components/brand";
+import { RocketMark } from "../../components/brand";
 import { applyTheme, readTheme } from "../../lib/theme";
 import { WaitlistForm } from "./WaitlistForm";
 import {
@@ -160,8 +160,8 @@ export default function LandingPage() {
     <div className="landing">
       <header className="landing-nav">
         <div className="landing-brand">
-          <HelmMark size={22} />
-          <span className="landing-brand__word">Helmly</span>
+          <RocketMark size={22} />
+          <span className="landing-brand__word">Luka</span>
         </div>
         <nav className="landing-nav__links">
           <a href="#how" className="landing-nav__anchor" onClick={(e) => { e.preventDefault(); scrollTo("how"); }}>
@@ -188,7 +188,7 @@ export default function LandingPage() {
           <div className="landing-pill">An AI marketing team for founders who don't have one yet</div>
           <h1 className="landing-h1">Your AI marketing team, always on</h1>
           <p className="landing-hero__sub">
-            Paste your website URL. Helmly reads your public pages to learn your business, then works around the
+            Paste your website URL. Luka reads your public pages to learn your business, then works around the
             clock across every growth channel — researching, writing, and finding opportunities — so solo founders
             and small teams can grow without a marketing hire.
           </p>
@@ -218,7 +218,7 @@ export default function LandingPage() {
           <Step
             label="Step 2 — Draft"
             title="A specialist for every channel, working every day"
-            sub="Each one works on a schedule. Channel by channel, you choose: review drafts before they go out, or let Helmly publish on its own. More channels are on the way."
+            sub="Each one works on a schedule. Channel by channel, you choose: review drafts before they go out, or let Luka publish on its own. More channels are on the way."
             subWidth={480}
           >
             <div className="landing-agents">
@@ -240,14 +240,14 @@ export default function LandingPage() {
                   <PlusIcon />
                 </div>
                 <div className="landing-agent__name">More to come</div>
-                <div className="landing-agent__blurb">New specialists join the team as Helmly grows.</div>
+                <div className="landing-agent__blurb">New specialists join the team as Luka grows.</div>
               </div>
             </div>
           </Step>
 
           <Step
             label="Step 3 — Grow"
-            title="You set the direction, Helmly does the work"
+            title="You set the direction, Luka does the work"
             sub="Adjust guidance, tune each agent, and see what gets posted and what works, all in one place."
             subWidth={480}
           />
@@ -261,7 +261,7 @@ export default function LandingPage() {
               </h2>
               <p>
                 General, financial services, or health &amp; wellness — pick the rule pack that fits, or write your
-                own. Helmly flags what needs your attention, like a missing disclosure. Flagged drafts are held for
+                own. Luka flags what needs your attention, like a missing disclosure. Flagged drafts are held for
                 your review.
               </p>
             </div>
@@ -275,17 +275,17 @@ export default function LandingPage() {
 
         <section className="landing-cta">
           <h2 className="landing-h2">Put your growth on autopilot</h2>
-          <p className="landing-cta__sub">Join the waitlist — we'll email you when Helmly is ready for your website.</p>
+          <p className="landing-cta__sub">Join the waitlist — we'll email you when Luka is ready for your website.</p>
           <WaitlistForm source="cta" inputId="waitlist-cta-email" />
         </section>
       </main>
 
       <footer className="landing-footer">
         <div className="landing-brand landing-brand--muted">
-          <HelmMark size={16} />
-          <span>Helmly</span>
+          <RocketMark size={16} />
+          <span>Luka</span>
         </div>
-        <div>© 2026 Helmly</div>
+        <div>© 2026 Luka</div>
       </footer>
     </div>
   );

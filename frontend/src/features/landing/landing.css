@@ -91,7 +91,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  color: var(--color-accent);
+  color: var(--color-text);
 }
 
 .landing-brand__word {
@@ -566,6 +566,11 @@
 
 .landing-brand--muted {
   color: var(--color-text-subtle);
+}
+
+/* The brand rules forbid recoloring the rocket, so the footer mark is muted by fading the tile. */
+.landing-brand--muted svg {
+  opacity: 0.55;
 }
 
 /* ---- Responsive (the design is desktop-only; these are ours) ---- */

@@ -1,4 +1,4 @@
-# Helmly backend guide
+# Luka backend guide
 
 This document explains how the backend is put together: what each part does, how data moves through it, and where to look when you want to change something. It covers everything up to the end of Phase 1 (backend complete, no frontend yet).
 
@@ -8,7 +8,7 @@ For setup commands and the full API table, see the [README](../README.md). For t
 
 ## 1. The big picture
 
-Helmly helps a company grow its marketing without posting anything on its own:
+Luka helps a company grow its marketing without posting anything on its own:
 
 1. **Onboarding** crawls the company's website and writes six **context documents** (product, audience, brand voice, competitors, content strategy, compliance).
 2. Three **agents** run on schedules and draft content into an **inbox**:
@@ -284,7 +284,7 @@ sequenceDiagram
 ```
 
 ### 5.4 Content policy and guardrails
-This is how Helmly stays safe across industries without hardcoding any of them.
+This is how Luka stays safe across industries without hardcoding any of them.
 
 ```mermaid
 flowchart LR

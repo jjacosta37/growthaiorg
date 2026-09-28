@@ -22,7 +22,7 @@ from .urls import is_crawlable, normalize, prioritize, same_site
 
 log = logging.getLogger(__name__)
 
-USER_AGENT = "HelmlyBot/0.1 (internal content assistant)"
+USER_AGENT = "LukaBot/0.1 (internal content assistant)"
 MAX_BYTES = 3_000_000
 MAX_SITEMAPS = 20
 MIN_TEXT_CHARS = 200  # less extracted text than this marks a page "thin" (likely JavaScript-rendered)

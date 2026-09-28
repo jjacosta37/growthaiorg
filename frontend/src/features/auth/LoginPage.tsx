@@ -1,4 +1,4 @@
-/** Login. Accounts are created by an admin, so there is no signup — from "Helmly - Login.dc.html". */
+/** Login. Accounts are created by an admin, so there is no signup — from "Luka - Login.dc.html". */
 
 import { useState, type FormEvent } from "react";
 
@@ -21,7 +21,7 @@ export default function LoginPage() {
   const message =
     login.error instanceof ApiError
       ? login.error.status === 0
-        ? "Can't reach Helmly. Check your connection and try again."
+        ? "Can't reach Luka. Check your connection and try again."
         : login.error.detail
       : login.error
         ? "Something went wrong. Try again."

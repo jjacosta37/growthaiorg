@@ -1,8 +1,8 @@
 /**
  * The three-pane shell: sidebar | list | detail.
  *
- * From "Helmly - App Shell.dc.html". The sidebar owns the live status line and the
- * offline banner from "Helmly - Global States.dc.html".
+ * From "Luka - App Shell.dc.html". The sidebar owns the live status line and the
+ * offline banner from "Luka - Global States.dc.html".
  */
 
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -20,7 +20,7 @@ import {
 } from "../lib/queries";
 import { AGENT_TYPES, type AgentType } from "../lib/types";
 import { ChannelDot } from "./badges";
-import { HelmTile } from "./brand";
+import { RocketMark } from "./brand";
 import { Button, cx } from "./primitives";
 import { DropdownMenu } from "./feedback";
 
@@ -46,7 +46,7 @@ export function Shell() {
     <div className="shell">
       {offline && (
         <div className="shell__offline" role="alert">
-          <span>Can't reach Helmly — showing the last loaded data. Retrying…</span>
+          <span>Can't reach Luka — showing the last loaded data. Retrying…</span>
           <Button
             size="sm"
             onClick={() => {
@@ -182,9 +182,9 @@ function ProjectSwitcher({ name, url }: { name?: string; url?: string }) {
       align="left"
       trigger={({ toggle }) => (
         <button type="button" className="shell__project" onClick={toggle} title={url}>
-          <HelmTile size={20} />
+          <RocketMark size={20} />
           <span className="truncate" style={{ flex: 1, fontWeight: "var(--weight-semibold)" }}>
-            {name || "Helmly"}
+            {name || "Luka"}
           </span>
           <span className="subtle" style={{ fontSize: 10 }}>
             ▾

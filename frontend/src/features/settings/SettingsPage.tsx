@@ -1,6 +1,6 @@
 /**
  * Settings: the content policy, account and theme.
- * From "Helmly - Settings.dc.html".
+ * From "Luka - Settings.dc.html".
  *
  * Switching an industry pack previews the incoming rules and asks for confirmation
  * before it replaces the current set.
@@ -49,7 +49,7 @@ export default function SettingsPage() {
           <div>
             <h1 className="page__title">Settings</h1>
             <p className="page__subtitle">
-              Rules Helmly checks every draft against, before it reaches your inbox.
+              Rules Luka checks every draft against, before it reaches your inbox.
             </p>
           </div>
         </header>

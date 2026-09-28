@@ -1,6 +1,6 @@
 /**
  * Agent pages: one layout, three config bodies.
- * From "Helmly - Agent Pages.dc.html".
+ * From "Luka - Agent Pages.dc.html".
  *
  * Reddit adds the skipped list; Content adds the topic backlog and request form.
  */

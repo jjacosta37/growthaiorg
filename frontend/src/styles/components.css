@@ -1,7 +1,7 @@
 /*
   Component library styles.
 
-  Ported from "Helmly Components.dc.html". The design files carry hardcoded hex values
+  Ported from "Luka Components.dc.html". The design files carry hardcoded hex values
   inline; every one of them maps to a token, and only tokens appear here.
 */
 
@@ -107,7 +107,7 @@
   border: 1.5px solid currentColor;
   border-right-color: transparent;
   border-radius: var(--radius-full);
-  animation: helmly-spin 600ms linear infinite;
+  animation: luka-spin 600ms linear infinite;
 }
 
 /* -------------------------------------------------------------------- kbd */
@@ -540,7 +540,7 @@
 }
 
 .runstatus__dot--pulse {
-  animation: helmly-pulse 1.3s var(--ease-standard) infinite;
+  animation: luka-pulse 1.3s var(--ease-standard) infinite;
 }
 
 .runstatus--queued {
@@ -634,7 +634,7 @@
     var(--color-surface-sunken) 100%
   );
   background-size: 400px 100%;
-  animation: helmly-shimmer 1.4s linear infinite;
+  animation: luka-shimmer 1.4s linear infinite;
 }
 
 /* ----------------------------------------------------------------- toast */
@@ -1031,7 +1031,7 @@
   border: 1.5px solid var(--color-focus-ring);
   border-right-color: transparent;
   border-radius: var(--radius-full);
-  animation: helmly-spin 600ms linear infinite;
+  animation: luka-spin 600ms linear infinite;
 }
 
 /* -------------------------------------------------------- char counter */

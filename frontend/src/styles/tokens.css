@@ -1,5 +1,5 @@
 /*
-  Helmly design tokens
+  Luka design tokens
   Load Archivo (400/500/600) and IBM Plex Mono (400/500) before using these,
   e.g. via Google Fonts:
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -94,6 +94,15 @@
   --duration-fast: 120ms;
   --duration-normal: 200ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Brand mark: the rocket's parts echo the channel colors and never change with the theme.
+     Only the tile does: ink on light surfaces, a lifted tile with a border on dark ones. */
+  --brand-tile: #111111;
+  --brand-tile-border: transparent;
+  --brand-rocket-body: #ffffff;
+  --brand-rocket-window: #6366f1;
+  --brand-rocket-fins: #14b8a6;
+  --brand-rocket-flame: #f97316;
 }
 
 [data-theme="dark"] {
@@ -135,6 +144,9 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+
+  --brand-tile: #1c1c1f;
+  --brand-tile-border: #3f3f46;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -177,5 +189,8 @@
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6), 0 2px 6px rgba(0, 0, 0, 0.5);
+
+    --brand-tile: #1c1c1f;
+    --brand-tile-border: #3f3f46;
   }
 }

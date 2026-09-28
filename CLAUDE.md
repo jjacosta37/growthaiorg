@@ -1,9 +1,9 @@
-# CLAUDE.md — Helmly
+# CLAUDE.md — Luka
 
 Working agreement for this repo. The approved plan follows below; keep it up to date as milestones land.
 
 ## Conventions
-- **Platform, not bespoke.** Helmly is built as a product for any company. Never put customer-specific or industry-specific logic, names or examples in code, prompts, tests or docs. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts and code. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
+- **Platform, not bespoke.** Luka is built as a product for any company. Never put customer-specific or industry-specific logic, names or examples in code, prompts, tests or docs. Industry rules live in `backend/policies/*.yaml` (policy packs: data). Each project has an editable `ContentPolicy` (rules, author role, disclosure, blog disclaimer) that is rendered into every call's guardrails and used by the compliance lint. Prompts refer to "the content rules" and the context docs. `tests/test_platform_neutral.py` enforces this for active prompts and code. When a live run exposes a problem, fix it generically (a rule, a setting, a better generic prompt) and check that the fix doesn't assume one industry.
 - Stack is fixed: Django + DRF + Postgres, Celery + beat + Redis, Vite React TS, `anthropic` SDK. No LangChain/LangGraph/Agent SDK.
 - **Only `backend/llm/` imports `anthropic`.** Pipelines call `llm.complete(...)` / `llm.batch.*`.
 - **Only `llm/tracing.py` imports `langsmith`**, for the same reason only `backend/llm/` imports `anthropic`: it is where tracing is made unable to break a run (guarded span creation, `LANGSMITH_TRACING` honoured, a failed wrap degrading to an untraced client). Everything else imports `traceable` / `trace_group` / `trace_tool` from `llm.tracing`.
@@ -48,10 +48,10 @@ A pipeline inherits three things for free: `running()` gives it a LangSmith span
 - **A step both paths can reach is reported from one shared function**, so a batched run is not second-class in the trail.
 - **`data` is JSON, and identifiers only.** `Decimal` is not serialisable — convert at the boundary, as `record_external` does. Ids, counts, scores, durations and costs, yes; crawled text, draft bodies, post bodies, no. Model rationale (a relevance `reason`) is truncated, because the full text is already on the row. This is the "log identifiers, never content" rule above, and `data` is not an exception to it.
 
-# Helmly — implementation plan
+# Luka — implementation plan
 
 ## Context
-Helmly is an AI growth assistant for a company's marketing. Users own projects: each project is one company's workspace, and a user can own several and switch between them. Accounts are created by an admin (Django admin or `manage.py bootstrap`); there is no public signup. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
+Luka is an AI growth assistant for a company's marketing. Users own projects: each project is one company's workspace, and a user can own several and switch between them. Accounts are created by an admin (Django admin or `manage.py bootstrap`); there is no public signup. It crawls the company's website, writes context docs, and runs three scheduled "agents" (Reddit, Content, X). Each agent is a deterministic Celery pipeline that drafts content into a triage inbox. Nothing is published automatically.
 
 **How this differs from the existing code:** the repo has one commit containing a 1-line `README.md`. Nothing was built from the earlier spec, so there's nothing to reconcile. This is a greenfield build.
 
@@ -135,7 +135,7 @@ Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent
 "Copy & open" writes to the clipboard, calls `window.open`, and records a pending item ID. On `visibilitychange` back to the tab, it shows "Did you post it?". Shortcuts: j/k/c/e/r/d, shown as hints. Markdown editing uses a textarea with a react-markdown preview. Competitors and subreddits use chip inputs. Styling is only `tokens.css` (color, type, spacing, radius, light/dark), with no visual polish yet.
 
 ## Milestones (each ends runnable)
-**Progress:** Phase 1 complete (M1–M6 and the content policy). Phase 2 built (M7–M8); the product was renamed Sift → Helmly alongside it.
+**Progress:** Phase 1 complete (M1–M6 and the content policy). Phase 2 built (M7–M8); the product was renamed Sift → Helmly alongside it, and later Helmly → Luka (with the rocket mark).
 
 **Phase 1: backend only.** Each milestone is exercised through the DRF API, the browsable API or admin, and pytest. docker-compose leaves out the frontend service until Phase 2.
 1. **Skeleton:** Django, DRF, Celery, beat, Postgres, Redis in docker-compose; session auth endpoints; `llm/` with prompt loader, `complete()`, cost logging, LangSmith; `.env.example`; README. Tests: prompt loader, cost calculation, structured parse and retry, refusal handling (SDK mocked).

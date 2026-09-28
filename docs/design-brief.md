@@ -2,7 +2,7 @@
 
 The prompt used to create the brand, design tokens, components and screens in Claude Design. Phase 2 (frontend) builds against the token names and screens listed here.
 
-> **Historical document.** This brief was written when the product was called Sift and asked for a "Sift" wordmark. The design came back branded **Helmly** (ship's-helm mark), and Helmly is now the product name everywhere else in the repo. The brief is kept as-written because it records what was asked for; the delivered designs in the handoff bundle are the source of truth for brand and copy. Everything else here — token names, screen list, component list — still holds.
+> **Historical document.** This brief was written when the product was called Sift and asked for a "Sift" wordmark. The design came back branded **Helmly** (ship's-helm mark); the product has since been renamed **Luka**, with a rocket mark, and Luka is now the name everywhere else in the repo. The brief is kept as-written because it records what was asked for; the delivered designs in the handoff bundles, plus the Luka logo handoff for the name and mark, are the source of truth for brand and copy. Everything else here — token names, screen list, component list — still holds.
 
 ## What Sift is
 Sift is a web app for founders and small marketing teams. You give it your company's website, and it:

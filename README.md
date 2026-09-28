@@ -1,6 +1,6 @@
-# Helmly
+# Luka
 
-An AI growth assistant for a company's marketing. Helmly reads the company's website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
+An AI growth assistant for a company's marketing. Luka reads the company's website, writes context documents, and runs scheduled agents (Reddit, Content, X). The agents draft marketing content into an inbox for review, and nothing is posted automatically.
 
 **New here? Read [`docs/backend-guide.md`](docs/backend-guide.md)**, which covers the structure, data model and main flows with diagrams. Decisions and conventions are in [`CLAUDE.md`](CLAUDE.md).
 
@@ -45,11 +45,11 @@ Only one context run (onboarding, recrawl or regenerate) can be active at a time
 Requires Docker.
 
 ```bash
-cp .env.example .env              # set ANTHROPIC_API_KEY, HELMLY_ADMIN_USERNAME/PASSWORD
+cp .env.example .env              # set ANTHROPIC_API_KEY, LUKA_ADMIN_USERNAME/PASSWORD
 docker compose up --build         # app :5173, api :8000, worker, beat, postgres, redis
 ```
 
-A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `web`, `worker` and `beat` start. `bootstrap` creates the admin user from `HELMLY_ADMIN_*` and the default project. Then:
+A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `web`, `worker` and `beat` start. `bootstrap` creates the admin user from `LUKA_ADMIN_*` and the default project. Then:
 
 - Admin (LLM call log, batches, periodic tasks): http://localhost:8000/admin/
 - The app: http://localhost:5173
@@ -58,39 +58,39 @@ A one-shot `migrate` service runs migrations and `manage.py bootstrap` before `w
 - Real API smoke test: `docker compose exec web python manage.py llm_smoke`
 
 <details>
-<summary>Upgrading a database created before the Sift → Helmly rename</summary>
+<summary>Upgrading a database created before the Helmly → Luka rename</summary>
 
-The Postgres role and database were renamed from `sift` to `helmly`. `POSTGRES_*` only applies when the volume is first initialised, so an existing volume still has the old role and `migrate` fails with `password authentication failed for user "helmly"`.
+The Postgres role and database were renamed from `helmly` to `luka` (and from `sift` to `helmly` before that). `POSTGRES_*` only applies when the volume is first initialised, so an existing volume still has the old role and `migrate` fails with `password authentication failed for user "luka"`.
 
 Either start fresh (`docker compose down -v`, which **deletes local data**), or rename in place and keep it:
 
 ```bash
 docker compose up -d postgres
-docker compose exec -T postgres psql -U sift -d postgres <<'SQL'
-ALTER DATABASE sift RENAME TO helmly;
-CREATE ROLE helmly SUPERUSER LOGIN PASSWORD 'helmly';
-ALTER DATABASE helmly OWNER TO helmly;
+docker compose exec -T postgres psql -U helmly -d postgres <<'SQL'
+ALTER DATABASE helmly RENAME TO luka;
+CREATE ROLE luka SUPERUSER LOGIN PASSWORD 'luka';
+ALTER DATABASE luka OWNER TO luka;
 SQL
-docker compose exec -T postgres psql -U helmly -d helmly <<'SQL'
+docker compose exec -T postgres psql -U luka -d luka <<'SQL'
 DO $$
 DECLARE r record;
 BEGIN
-  EXECUTE 'ALTER SCHEMA public OWNER TO helmly';
+  EXECUTE 'ALTER SCHEMA public OWNER TO luka';
   FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
-    EXECUTE format('ALTER TABLE public.%I OWNER TO helmly', r.tablename);
+    EXECUTE format('ALTER TABLE public.%I OWNER TO luka', r.tablename);
   END LOOP;
   FOR r IN SELECT sequencename FROM pg_sequences WHERE schemaname='public' LOOP
-    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO helmly', r.sequencename);
+    EXECUTE format('ALTER SEQUENCE public.%I OWNER TO luka', r.sequencename);
   END LOOP;
 END $$;
 SQL
 ```
 
-The old `sift` role stays behind: it is Postgres's bootstrap superuser and owns pinned system catalogs, so it can't be dropped. Nothing uses it.
+The old `helmly` role (and `sift`, on a volume that predates both renames) stays behind. If it is Postgres's bootstrap superuser, it owns pinned system catalogs and can't be dropped. Nothing uses it.
 
-Also update `.env`: `HELMLY_ADMIN_*` (was `SIFT_ADMIN_*`) and `DATABASE_URL=postgres://helmly:helmly@localhost:5433/helmly`.
+Also update `.env`: `LUKA_ADMIN_*` (was `HELMLY_ADMIN_*`), `DATABASE_URL=postgres://luka:luka@localhost:5433/luka` and `LANGSMITH_PROJECT=luka`.
 
-On Render, the Blueprint services were renamed too (`sift-web` → `helmly-web`, and so on), so a redeploy creates new services and prompts for the secrets again.
+On Render, the Blueprint services were renamed too (`helmly-web` → `luka-web`, and so on), so a redeploy creates new services and a new database, and prompts for the secrets again. Move data across with `pg_dump`/`pg_restore` before deleting the old `helmly-*` services.
 </details>
 
 ### Frontend
@@ -140,7 +140,7 @@ cd backend && ../.venv/bin/pytest
 | `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated |
 | `DATABASE_URL` | Postgres URL |
 | `REDIS_URL` | Celery broker |
-| `HELMLY_ADMIN_USERNAME`, `HELMLY_ADMIN_PASSWORD`, `HELMLY_ADMIN_EMAIL` | The first admin user and their project, created by `bootstrap`. Add more users in Django admin. |
+| `LUKA_ADMIN_USERNAME`, `LUKA_ADMIN_PASSWORD`, `LUKA_ADMIN_EMAIL` | The first admin user and their project, created by `bootstrap`. Add more users in Django admin. |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `LLM_MODEL_FAST`, `LLM_MODEL_WRITER` | Model IDs for cheap tasks and for writing |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` | LangSmith tracing of every LLM call |
@@ -189,22 +189,22 @@ Everything goes through `backend/llm/`. Pipelines call `llm.complete("task.name"
 `render.yaml` is a Render Blueprint. It defines the web service (gunicorn), a Celery worker, Celery beat, managed Postgres and Key Value (Redis). It validates against Render's published schema. The frontend static site is added in Phase 2.
 
 1. Push the repo to GitHub, and merge the branch you want to deploy.
-2. In Render: **New → Blueprint**, then pick the repo and branch. Render prompts once for each secret on `helmly-web`:
-   - `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, and optionally `LANGSMITH_API_KEY` (set `LANGSMITH_TRACING=true` in the `helmly-shared` group to turn tracing on)
-   - `HELMLY_ADMIN_USERNAME`, `HELMLY_ADMIN_PASSWORD`, `HELMLY_ADMIN_EMAIL`, for the single admin user
-   - `SENTRY_DSN` on the `helmly-shared` group, so web, worker and beat all report into one
+2. In Render: **New → Blueprint**, then pick the repo and branch. Render prompts once for each secret on `luka-web`:
+   - `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, and optionally `LANGSMITH_API_KEY` (set `LANGSMITH_TRACING=true` in the `luka-shared` group to turn tracing on)
+   - `LUKA_ADMIN_USERNAME`, `LUKA_ADMIN_PASSWORD`, `LUKA_ADMIN_EMAIL`, for the single admin user
+   - `SENTRY_DSN` on the `luka-shared` group, so web, worker and beat all report into one
      project. Leave it blank to deploy with error reporting off.
 
-   `helmly-worker` and `helmly-beat` read those same secrets from `helmly-web`, and `DJANGO_SECRET_KEY` is generated.
+   `luka-worker` and `luka-beat` read those same secrets from `luka-web`, and `DJANGO_SECRET_KEY` is generated.
 3. Every deploy runs `migrate` and `bootstrap` (idempotent) before the new version goes live. The health check is `/api/health/`.
 4. Verify:
-   - `https://<helmly-web host>/api/health/` returns `{"ok": true}`
+   - `https://<luka-web host>/api/health/` returns `{"ok": true}`
    - you can log in at `/admin/`
-   - in the Render shell for `helmly-web`, `python manage.py llm_smoke` makes one cheap real call
+   - in the Render shell for `luka-web`, `python manage.py llm_smoke` makes one cheap real call
 5. Onboard with `POST /api/onboarding/start/`, then enable agents with `PATCH /api/agents/<type>/` `{"enabled": true}`. Beat picks up schedule changes without a restart.
-6. Once HTTPS is confirmed working, set `DJANGO_HSTS_SECONDS` (for example `31536000`) on `helmly-web`. Don't set it before then: browsers cache HSTS.
+6. Once HTTPS is confirmed working, set `DJANGO_HSTS_SECONDS` (for example `31536000`) on `luka-web`. Don't set it before then: browsers cache HSTS.
 
 Notes:
 - **Plans:** the Blueprint uses small instance types (`0.5c-512mb` services, `0.1c-256mb` Postgres, `256mb` Key Value). Background workers and `preDeployCommand` need paid plans. See Render's pricing page for current costs.
-- **Beat:** run exactly **one** `helmly-beat` instance, or scheduled runs fire twice.
+- **Beat:** run exactly **one** `luka-beat` instance, or scheduled runs fire twice.
 - **Redis:** Key Value uses `noeviction`, because it's the Celery broker and queued tasks must never be dropped.

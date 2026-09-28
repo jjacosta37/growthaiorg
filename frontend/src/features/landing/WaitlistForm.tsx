@@ -11,7 +11,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 0) return "Can't reach Helmly. Check your connection and try again.";
+    if (error.status === 0) return "Can't reach Luka. Check your connection and try again.";
     if (error.status === 429) return "Too many tries from here. Try again in a little while.";
     if (error.fieldErrors.email?.length) return "That doesn't look like an email address.";
   }
@@ -34,7 +34,7 @@ export function WaitlistForm({
   if (join.isSuccess) {
     return (
       <div className="landing-waitlist__done" role="status">
-        You're on the list. We'll email you when Helmly is ready.
+        You're on the list. We'll email you when Luka is ready.
       </div>
     );
   }

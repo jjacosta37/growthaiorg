@@ -1,6 +1,6 @@
 /**
  * Stats: weekly drafts per agent, dismiss reasons and spend.
- * From "Helmly - Stats.dc.html".
+ * From "Luka - Stats.dc.html".
  *
  * Charts are hand-built CSS bars, as in the designs — no chart library. Every weekly
  * series in the payload is index-aligned to `weeks`.

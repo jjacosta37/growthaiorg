@@ -10,11 +10,13 @@ import { useCallback, useEffect, useState } from "react";
 
 export type Theme = "light" | "dark" | "system";
 
-const STORAGE_KEY = "helmly.theme";
+const STORAGE_KEY = "luka.theme";
+/** The key used before the Helmly → Luka rename, read so a saved choice survives it. */
+const LEGACY_STORAGE_KEY = "helmly.theme";
 
 export function readTheme(): Theme {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (stored === "light" || stored === "dark" || stored === "system") return stored;
   } catch {
     // private browsing or blocked storage: fall through to the default

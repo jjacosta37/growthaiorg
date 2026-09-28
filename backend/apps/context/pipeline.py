@@ -68,7 +68,7 @@ def crawl_and_store(project, reporter: RunReporter, max_pages: int) -> list[Craw
     if thin := result.thin_pages:
         hint = "" if renderer else " Set APIFY_TOKEN to render them with a browser."
         reporter.warning(
-            f"{len(thin)} page(s) only render with JavaScript, so Helmly has just their title and "
+            f"{len(thin)} page(s) only render with JavaScript, so Luka has just their title and "
             f"description: {', '.join(p.url for p in thin[:5])}{'…' if len(thin) > 5 else ''}.{hint}"
         )
     with transaction.atomic():

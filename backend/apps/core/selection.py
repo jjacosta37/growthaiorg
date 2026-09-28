@@ -13,7 +13,7 @@ from .models import Project
 SESSION_KEY = "project_id"
 HEADER = "HTTP_X_PROJECT_ID"
 
-_CACHE_ATTR = "_helmly_current_project"
+_CACHE_ATTR = "_luka_current_project"
 
 
 class NoProjectSelected(APIException):

@@ -65,7 +65,7 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {"default": env.db("DATABASE_URL", default="postgres://helmly:helmly@localhost:5433/helmly")}
+DATABASES = {"default": env.db("DATABASE_URL", default="postgres://luka:luka@localhost:5433/luka")}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LANGUAGE_CODE = "en-us"
@@ -90,7 +90,7 @@ REST_FRAMEWORK = {
 # only where that is wanted: on by default for local work and CI, off in prod (see prod.py).
 API_DOCS_ENABLED = env.bool("DJANGO_API_DOCS", default=True)
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Helmly API",
+    "TITLE": "Luka API",
     "VERSION": "0.1.0",
     # Stable enum names for the generated frontend types (instead of Status393Enum and similar).
     "ENUM_NAME_OVERRIDES": {

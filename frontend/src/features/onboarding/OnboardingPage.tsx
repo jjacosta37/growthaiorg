@@ -5,7 +5,7 @@
  * create-project screen. The project is created on submit when the user has none, or
  * when they asked for a new one (?new=1) — otherwise the current project is onboarded.
  *
- * From "Helmly - Onboarding.dc.html". Both the thin-content warning and the
+ * From "Luka - Onboarding.dc.html". Both the thin-content warning and the
  * no-readable-pages failure end on Context — failure is never a dead end.
  */
 
@@ -79,7 +79,7 @@ function StartForm({ onStarted }: { onStarted: (runId: number) => void }) {
       <div className="stack" style={{ gap: "var(--space-2)", textAlign: "center" }}>
         <h1 className="page__title">Let's create your Project</h1>
         <p className="muted">
-          Helmly crawls your site and writes the context documents its agents work from.
+          Luka crawls your site and writes the context documents its agents work from.
         </p>
       </div>
 
@@ -91,7 +91,7 @@ function StartForm({ onStarted }: { onStarted: (runId: number) => void }) {
 
       <Field
         label="Project name"
-        hint="Optional — Helmly names it from your site if you leave this blank."
+        hint="Optional — Luka names it from your site if you leave this blank."
         htmlFor="name"
         error={fieldError.name}
       >

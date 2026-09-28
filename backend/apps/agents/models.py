@@ -126,6 +126,11 @@ class ExternalUsage(models.Model):
     items = models.PositiveIntegerField(default=0)
     cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0)
     error = models.TextField(blank=True)
+    # For reading the run trail, not for billing: cost_usd stays the spend record apps/stats
+    # aggregates. `status` is the provider's own word for how the call ended, kept even when
+    # it succeeded, so "slow but fine" and "failed" are told apart without parsing `error`.
+    status = models.CharField(max_length=30, blank=True)
+    duration_ms = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

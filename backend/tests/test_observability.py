@@ -167,3 +167,116 @@ def test_sentry_is_off_without_a_dsn():
 
 def test_settings_do_not_enable_sentry_under_test(settings):
     assert settings.SENTRY_ENABLED is False
+
+
+# --- External calls ----------------------------------------------------------------------
+# An Apify call is the slowest, priciest part of a run and used to be the least visible: the
+# usage row was written and nothing reported it. `record_external` does both at once.
+
+
+def _reporter(project):
+    run = create_run(project, AgentRun.Kind.REDDIT)
+    return run, RunReporter(run)
+
+
+@pytest.mark.django_db
+def test_external_call_is_both_costed_and_reported(project):
+    from decimal import Decimal
+
+    from apps.agents.external import record_external
+    from apps.agents.models import ExternalUsage
+
+    run, reporter = _reporter(project)
+    record_external(run, reporter, provider="apify", purpose="reddit_search", resource_id="acme/scraper",
+                    external_run_id="apify_1", status="SUCCEEDED", items=12, cost_usd=Decimal("0.031"),
+                    duration_ms=4200, message="Searched 3 queries", queries=3)
+
+    usage = ExternalUsage.objects.get()
+    assert (usage.status, usage.duration_ms, usage.items) == ("SUCCEEDED", 4200, 12)
+
+    event = RunEvent.objects.filter(run=run).last()
+    assert event.level == RunEvent.Level.INFO
+    assert event.data["external_run_id"] == "apify_1"
+    assert event.data["duration_ms"] == 4200 and event.data["queries"] == 3
+    # Decimal is not JSON-serialisable; the helper is what keeps it out of `data`.
+    assert event.data["cost_usd"] == pytest.approx(0.031)
+
+
+@pytest.mark.django_db
+def test_a_degraded_external_call_warns_rather_than_failing_the_run(project):
+    from apps.agents.external import record_external
+
+    run, reporter = _reporter(project)
+    record_external(run, reporter, provider="apify", purpose="reddit_search",
+                    status="TIMED-OUT", error="Apify run did not finish in time",
+                    message="Searched 3 queries")
+
+    event = RunEvent.objects.filter(run=run).last()
+    assert event.level == RunEvent.Level.WARNING
+    assert event.data["status"] == "TIMED-OUT"
+    run.refresh_from_db()
+    assert run.stats["warnings"] and not run.stats.get("errors")  # degraded, not abandoned
+
+
+# --- Tool spans --------------------------------------------------------------------------
+
+
+def test_trace_tool_is_a_usable_no_op_when_tracing_is_off(settings):
+    """Tracing is off under test, and a span must still hand back somewhere to write."""
+    from llm.tracing import trace_tool
+
+    assert settings.LANGSMITH_TRACING is False
+    with trace_tool("apify.reddit_search", inputs={"q": "x"}) as outputs:
+        outputs.update(items=3)
+    assert outputs == {"items": 3}
+
+
+def test_trace_tool_lets_the_bodys_exception_through():
+    """Observability never swallows the caller's failure."""
+    from llm.tracing import trace_tool
+
+    with pytest.raises(ValueError, match="boom"), trace_tool("apify.reddit_search"):
+        raise ValueError("boom")
+
+
+# --- Conventions new agents inherit ------------------------------------------------------
+# `running()` gives every pipeline its span, status lifecycle and Sentry tags for free, but
+# an external call is invisible unless its author opts in. These guard the two chokepoints
+# so a new agent can't quietly reintroduce the gap.
+
+
+def _source_files():
+    from pathlib import Path
+
+    from django.conf import settings
+
+    root = Path(settings.BASE_DIR)
+    return [p for p in root.rglob("*.py")
+            if not {"tests", "migrations"} & set(p.parts)]
+
+
+def test_external_usage_rows_are_only_written_by_record_external():
+    """Writing the row and reporting the call are one action, so the row has one writer.
+
+    A new provider that creates its own ExternalUsage would be costed but invisible — the
+    exact gap the Apify Reddit search had.
+    """
+    offenders = [str(p) for p in _source_files()
+                 if "ExternalUsage.objects.create" in p.read_text() and p.name != "external.py"]
+    assert offenders == [], "write the row via apps.agents.external.record_external instead"
+
+
+def test_langsmith_is_only_imported_by_the_tracing_module():
+    """The same containment as the Anthropic SDK, for the same reason.
+
+    `llm/tracing.py` is where tracing is made unable to break a run: span creation is
+    guarded, `LANGSMITH_TRACING` is honoured, and a wrap failure degrades to an untraced
+    client. Reach for langsmith anywhere else and a pipeline inherits none of that — a
+    version mismatch or an unserialisable payload takes down the run it was watching.
+    """
+    import re
+
+    imports_langsmith = re.compile(r"^\s*(?:from|import)\s+langsmith", re.MULTILINE)
+    offenders = [str(p) for p in _source_files()
+                 if imports_langsmith.search(p.read_text()) and p.name != "tracing.py"]
+    assert offenders == [], "import from llm.tracing instead; it is what fails safe"

@@ -53,7 +53,7 @@ def test_render_maps_items_and_cost():
         ("https://acme.example/pricing", "Pricing | OW", "# Pricing\nOne plan."),  # markdown preferred
         ("https://acme.example/", "", "Home text"),
     ]
-    assert (r.external_id, r.cost_usd, r.error) == ("apify_run_1", Decimal("0.031"), "")
+    assert (r.external_run_id, r.cost_usd, r.error) == ("apify_run_1", Decimal("0.031"), "")
 
 
 def test_render_errors_degrade_gracefully():

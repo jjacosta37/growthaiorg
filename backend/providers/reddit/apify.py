@@ -7,9 +7,12 @@ start fee. Verified against a live run on 2026-09-19.
 
 import logging
 import math
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlencode
+
+from llm.tracing import trace_tool
 
 from .base import RedditPostData, RedditSearch, RedditSearchResult
 
@@ -112,22 +115,46 @@ class ApifyRedditSource:
         result = RedditSearchResult(provider=self.name, resource_id=self.actor_id)
         if not query.subreddits or not query.keywords:
             return result
+        run_input = self.build_input(query)
+        result.queries = len(run_input["startUrls"])
+        with trace_tool(
+            "apify.reddit_search",
+            inputs={"subreddits": query.subreddits, "keywords": query.keywords,
+                    "time_window": query.time_window, "max_posts": query.max_posts},
+            metadata={"actor_id": self.actor_id, "queries": result.queries},
+        ) as outputs:
+            self._search(query, run_input, result)
+            outputs.update(apify_run_id=result.external_run_id, status=result.status,
+                           items_raw=result.items_raw, posts=len(result.posts),
+                           cost_usd=float(result.cost_usd), duration_ms=result.duration_ms,
+                           error=result.error)
+        return result
+
+    def _search(self, query: RedditSearch, run_input: dict, result: RedditSearchResult) -> None:
+        """Run the actor and fill `result`. Never raises: a failed search degrades to an
+        error string so the pipeline can carry on (or stop) with the facts in hand."""
+        started = time.monotonic()
         try:
-            run = self.client.actor(self.actor_id).call(run_input=self.build_input(query), run_timeout=self.timeout)
+            run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout)
         except Exception as exc:  # network/auth/actor failure: surface it on the run
+            result.duration_ms = int((time.monotonic() - started) * 1000)
             log.warning("apify reddit search failed: %s", exc, exc_info=True)
             result.error = f"{type(exc).__name__}: {exc}"
-            return result
+            return
         if run is None:
+            result.duration_ms = int((time.monotonic() - started) * 1000)
+            result.status = "TIMED-OUT"
             result.error = "Apify run did not finish in time"
-            return result
+            return
         result.external_run_id = run.id or ""
+        result.status = run.status or ""
         result.cost_usd = Decimal(str(run.usage_total_usd or 0))
         if run.status != "SUCCEEDED":
             result.error = f"Apify run {run.id} ended with status {run.status}"
         seen: set[str] = set()
         posts = []
         for item in self.client.dataset(run.default_dataset_id).iterate_items():
+            result.items_raw += 1
             post = map_item(item)
             if post and post.reddit_id not in seen:
                 seen.add(post.reddit_id)
@@ -135,4 +162,4 @@ class ApifyRedditSource:
         epoch = datetime.min.replace(tzinfo=None)
         posts.sort(key=lambda p: p.posted_at.replace(tzinfo=None) if p.posted_at else epoch, reverse=True)
         result.posts = posts[: query.max_posts]
-        return result
+        result.duration_ms = int((time.monotonic() - started) * 1000)

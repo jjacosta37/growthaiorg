@@ -48,7 +48,8 @@ def test_sitemap_index_crawl_respects_robots_limit_and_skips():
     crawler, requested = make_crawler(routes)
     progress = []
 
-    result = crawler.crawl("https://acme.example", max_pages=5, progress=progress.append)
+    result = crawler.crawl("https://acme.example", max_pages=5,
+                           progress=lambda msg, **data: progress.append(msg))
 
     assert result.discovery == "sitemap"
     assert result.discovered == 6
@@ -110,7 +111,7 @@ class FakeRenderer:
 
         self.requested = urls
         pages = [RenderedPage(url=u + "/", title="Pricing", text=self.texts[u]) for u in urls if u in self.texts]
-        return RenderResult(pages=pages, provider="fake", external_id="run1", cost_usd=Decimal("0.02"))
+        return RenderResult(pages=pages, provider="fake", external_run_id="run1", cost_usd=Decimal("0.02"))
 
 
 def _spa_routes():

@@ -40,6 +40,13 @@ class RedditSearchResult:
     external_run_id: str = ""
     cost_usd: Decimal = Decimal(0)
     error: str = ""
+    # Reported on the run so a search is not an opaque gap. `items_raw` is what the provider
+    # returned before mapping, dedupe and truncation; `queries` is how many searches it took,
+    # which the pipeline can't work out for itself without knowing the provider's query syntax.
+    status: str = ""
+    duration_ms: int = 0
+    items_raw: int = 0
+    queries: int = 0
 
 
 class RedditSource(Protocol):

@@ -191,3 +191,91 @@ def test_scheduled_entry_point_respects_enabled_and_conflicts(project, fake_anth
 
     run_scheduled_agent(project.pk, "reddit")  # previous run still waiting on its batch → skipped
     assert AgentRun.objects.count() == 1
+
+
+# --- Run trail ---------------------------------------------------------------------------
+# The events are what explains a run after the fact, so their `data` is asserted like any
+# other output. Messages stay one line; the detail rides in `data`.
+
+
+def events_of(run):
+    from apps.agents.models import RunEvent
+
+    return list(RunEvent.objects.filter(run=run))
+
+
+def event_with(run, key):
+    return next(e for e in events_of(run) if key in e.data)
+
+
+def test_the_fetch_event_names_every_configured_subreddit(project, fake_anthropic, monkeypatch):
+    """A subreddit that returned nothing is the fact this step used to hide, so it is
+    reported as an explicit zero rather than by being absent."""
+    configure(project, subreddits=["projectmanagement", "smallbusiness"])
+    install_source(monkeypatch, [post("a", "hi-yes"), post("b", "mid")])  # both in projectmanagement
+    fake_anthropic(responder=reddit_responder())
+
+    run = run_now(project)
+
+    data = event_with(run, "by_subreddit").data
+    assert data["by_subreddit"] == {"projectmanagement": 2, "smallbusiness": 0}
+    assert (data["fetched"], data["new_posts"], data["duplicates"]) == (2, 2, 0)
+
+
+def test_the_scoring_event_carries_the_distribution_and_the_top_posts(project, fake_anthropic, monkeypatch):
+    configure(project)
+    install_source(monkeypatch, [post("a", "hi-yes"), post("b", "mid"), post("c", "lo")])
+    fake_anthropic(responder=reddit_responder())
+
+    run = run_now(project)
+
+    data = event_with(run, "distribution").data
+    assert (data["scored"], data["failed"]) == (3, 0)
+    assert data["distribution"] == {"0-24": 1, "25-49": 0, "50-74": 1, "75-100": 1}
+    top = data["top"]
+    assert [p["reddit_id"] for p in top] == ["a", "b", "c"]  # highest score first
+    assert top[0]["score"] == 90 and top[0]["reply_worthwhile"] is True
+    assert "body of" not in json.dumps(data).lower()  # identifiers and scores, never content
+
+
+def test_the_scoring_event_is_reported_on_the_batch_path_too(project, fake_anthropic, monkeypatch):
+    """The batch path scores in a different place; it must not be second-class in the trail."""
+    configure(project, batch_scheduled_scoring=True)
+    install_source(monkeypatch, [post("a", "hi-yes"), post("b", "lo")])
+    responder = reddit_responder()
+    fake = fake_anthropic(responder=responder)
+    fake.messages.batches.answer = lambda cid, params: responder(params)
+    monkeypatch.setattr(reddit_tasks.poll_scoring_batch, "apply_async", lambda args, countdown: None)
+
+    run = run_now(project, trigger=AgentRun.Trigger.SCHEDULED)
+    assert run.status == "waiting_batch"
+    reddit_tasks.poll_scoring_batch(run.pk)
+    run.refresh_from_db()
+
+    assert run.status == "succeeded", run.error
+    assert event_with(run, "distribution").data["scored"] == 2
+
+
+def test_the_search_is_costed_and_reported_as_one_event(project, fake_anthropic, monkeypatch):
+    """The adapter's facts (run id, duration, raw item count) reach the trail, not just the DB."""
+    from decimal import Decimal
+
+    configure(project)
+    source = install_source(monkeypatch, [post("a", "hi-yes")])
+    source.name = "apify"
+
+    def search(query):
+        return RedditSearchResult(posts=[post("a", "hi-yes")], provider="apify", resource_id="acme/scraper",
+                                  external_run_id="apify_1", cost_usd=Decimal("0.02"), status="SUCCEEDED",
+                                  duration_ms=3000, items_raw=7, queries=2)
+
+    source.search = search
+    fake_anthropic(responder=reddit_responder())
+
+    run = run_now(project)
+
+    usage = ExternalUsage.objects.get()
+    assert (usage.status, usage.duration_ms, usage.external_run_id) == ("SUCCEEDED", 3000, "apify_1")
+    data = event_with(run, "items_raw").data
+    assert (data["items_raw"], data["queries"], data["items"]) == (7, 2, 1)
+    assert data["cost_usd"] == pytest.approx(0.02)

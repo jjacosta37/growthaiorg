@@ -11,7 +11,8 @@ from django.db import transaction
 from django.utils import timezone
 
 import llm
-from apps.agents.models import AgentConfig, AgentRun, AgentType, ExternalUsage
+from apps.agents.external import record_external
+from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.agents.schedule import sync_periodic_task
 from apps.core.models import Project
@@ -54,15 +55,16 @@ def crawl_and_store(project, reporter: RunReporter, max_pages: int) -> list[Craw
                         delay_seconds=settings.CRAWL_DELAY_SECONDS, renderer=renderer)
     if result.render is not None:
         r = result.render
-        ExternalUsage.objects.create(
-            project=project, agent_run=reporter.run, provider=r.provider, purpose="render_pages",
-            resource_id=settings.APIFY_RENDER_ACTOR, external_run_id=r.external_id, items=len(r.pages),
-            cost_usd=r.cost_usd, error=r.error,
-        )
         rendered = sum(p.rendered for p in result.pages)
-        reporter.event(f"Rendered {rendered} JavaScript page(s) (${r.cost_usd:.3f})")
-        if r.error:
-            reporter.warning(f"Browser rendering had a problem: {r.error}")
+        record_external(
+            reporter.run, reporter, provider=r.provider, purpose="render_pages",
+            resource_id=settings.APIFY_RENDER_ACTOR, external_run_id=r.external_run_id,
+            status=r.status, items=len(r.pages), cost_usd=r.cost_usd, duration_ms=r.duration_ms,
+            error=r.error,
+            message=f"Rendered {rendered} JavaScript page(s) in {round(r.duration_ms / 1000, 1)}s "
+                    f"(${r.cost_usd:.3f})",
+            rendered=rendered, requested=len(result.thin_pages) + rendered,
+        )
     if thin := result.thin_pages:
         hint = "" if renderer else " Set APIFY_TOKEN to render them with a browser."
         reporter.warning(
@@ -87,7 +89,9 @@ def crawl_and_store(project, reporter: RunReporter, max_pages: int) -> list[Craw
         discovery=result.discovery,
     )
     reporter.run.save(update_fields=["stats"])
-    reporter.success(f"Crawled {len(pages)} pages", skipped=result.skipped[:50])
+    reporter.success(f"Crawled {len(pages)} pages", skipped=result.skipped[:50],
+                     discovered=result.discovered, crawled=len(pages), discovery=result.discovery,
+                     thin=len(result.thin_pages), rendered=sum(p.rendered for p in result.pages))
     return pages
 
 

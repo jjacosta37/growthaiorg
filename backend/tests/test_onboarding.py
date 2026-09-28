@@ -227,7 +227,7 @@ def test_thin_pages_warn_and_rendering_is_costed(project, fake_anthropic, monkey
         pages.append(CrawledPageData(url=f"{url}/pricing", title="Pricing", text="Pricing\nOne plan.", thin=True))
         result = CrawlResult(root_url=url, discovery="sitemap", discovered=5, pages=pages)
         if renderer is not None:
-            result.render = RenderResult(provider="apify", external_id="r1", cost_usd=Decimal("0.04"))
+            result.render = RenderResult(provider="apify", external_run_id="r1", cost_usd=Decimal("0.04"))
         return result
 
     monkeypatch.setattr("apps.context.pipeline.crawl_site", crawl)
@@ -243,3 +243,24 @@ def test_thin_pages_warn_and_rendering_is_costed(project, fake_anthropic, monkey
     usage = ExternalUsage.objects.get()
     assert (usage.provider, usage.purpose, usage.cost_usd, usage.agent_run_id) == ("apify", "render_pages",
                                                                                    Decimal("0.04"), run.id)
+
+
+def test_crawl_progress_carries_structured_detail(project, fake_anthropic, monkeypatch):
+    """The crawler's progress line is a RunEvent, so its counts belong in `data`, not only
+    in the interpolated message."""
+    from apps.agents.models import RunEvent
+
+    fake_anthropic(responder=responder())
+
+    def crawl(url, max_pages, progress=None, delay_seconds=0, renderer=None):
+        progress("Found 9 pages in the sitemap; crawling 4", discovered=9, crawling=4, discovery="sitemap")
+        pages = [CrawledPageData(url=f"{url}/p{i}", title=f"P{i}", text="Real text " * 50) for i in range(4)]
+        return CrawlResult(root_url=url, discovery="sitemap", discovered=9, pages=pages)
+
+    monkeypatch.setattr("apps.context.pipeline.crawl_site", crawl)
+    run = run_onboarding(project)
+
+    discovery = RunEvent.objects.get(run=run, message__startswith="Found 9 pages")
+    assert discovery.data == {"discovered": 9, "crawling": 4, "discovery": "sitemap"}
+    summary = RunEvent.objects.get(run=run, message="Crawled 4 pages")
+    assert summary.data["crawled"] == 4 and summary.data["discovery"] == "sitemap"

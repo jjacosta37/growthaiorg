@@ -104,6 +104,9 @@ def running(run: AgentRun):
     synchronously). It is still reported — `log.exception` becomes a Sentry issue, tagged
     with the run so a failure can be traced back to a project and pipeline.
     """
+    # Read before RUNNING overwrites it: a run resumed from WAITING_BATCH opens a second span,
+    # and without the suffix LangSmith shows two identically-named traces for the one run.
+    phase = " (batch collect)" if run.status == AgentRun.Status.WAITING_BATCH else ""
     run.status = AgentRun.Status.RUNNING
     run.started_at = run.started_at or timezone.now()
     run.save(update_fields=["status", "started_at"])
@@ -118,7 +121,7 @@ def running(run: AgentRun):
     with sentry_sdk.new_scope() as scope:
         for key, value in tags.items():
             scope.set_tag(key, str(value))  # str, so enum members don't tag as "Kind.REDDIT"
-        with trace_group(f"{run.kind} run #{run.pk}", metadata=tags, inputs={"params": run.params}):
+        with trace_group(f"{run.kind} run #{run.pk}{phase}", metadata=tags, inputs={"params": run.params}):
             try:
                 yield reporter
             except Exception as exc:

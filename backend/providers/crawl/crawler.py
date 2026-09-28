@@ -51,7 +51,9 @@ class CrawlResult:
         return [p for p in self.pages if p.thin]
 
 
-ProgressFn = Callable[[str], None]
+# Takes a message plus arbitrary structured detail, which the pipeline passes straight
+# through to RunReporter.step as RunEvent.data.
+ProgressFn = Callable[..., None]
 
 
 class Crawler:
@@ -108,7 +110,7 @@ class Crawler:
     # -- Crawl ----------------------------------------------------------------
     def crawl(self, website_url: str, max_pages: int, progress: ProgressFn | None = None,
               renderer: PageRenderer | None = None) -> CrawlResult:
-        progress = progress or (lambda msg: None)
+        progress = progress or (lambda msg, **data: None)
         start = normalize(website_url)
         if not start:
             raise ValueError(f"Not a valid website URL: {website_url!r}")
@@ -120,15 +122,16 @@ class Crawler:
         candidates = prioritize([start, *sitemap_urls], root, max_pages)
         if len(candidates) > 1:
             result = CrawlResult(root_url=start, discovery="sitemap", discovered=len(set(sitemap_urls)))
-            progress(f"Found {result.discovered} pages in the sitemap; crawling {len(candidates)}")
+            progress(f"Found {result.discovered} pages in the sitemap; crawling {len(candidates)}",
+                     discovered=result.discovered, crawling=len(candidates), discovery="sitemap")
             for i, url in enumerate(candidates, 1):
                 self._fetch_page(url, result)
                 if i % 5 == 0:
-                    progress(f"Crawled {i}/{len(candidates)} pages")
+                    progress(f"Crawled {i}/{len(candidates)} pages", crawled=i, total=len(candidates))
                 self._sleep()
         else:
             result = CrawlResult(root_url=start, discovery="links")
-            progress("No usable sitemap; following links from the homepage")
+            progress("No usable sitemap; following links from the homepage", discovery="links")
             self._crawl_links(start, root, max_pages, result, progress)
         if renderer is not None and result.thin_pages:
             self._render_thin_pages(result, renderer, progress)
@@ -136,7 +139,8 @@ class Crawler:
 
     def _render_thin_pages(self, result: CrawlResult, renderer: PageRenderer, progress: ProgressFn) -> None:
         thin = result.thin_pages
-        progress(f"Rendering {len(thin)} JavaScript page(s) with a browser ({renderer.name})")
+        progress(f"Rendering {len(thin)} JavaScript page(s) with a browser ({renderer.name})",
+                 thin_pages=len(thin), renderer=renderer.name)
         rendered = renderer.render([p.url for p in thin])
         result.render = rendered
         by_url = {normalize(r.url): r for r in rendered.pages}
@@ -163,7 +167,8 @@ class Crawler:
                         seen.add(link)
                         queue.append(link)
             if visited % 5 == 0:
-                progress(f"Crawled {len(result.pages)} pages, {len(queue)} links queued")
+                progress(f"Crawled {len(result.pages)} pages, {len(queue)} links queued",
+                         crawled=len(result.pages), queued=len(queue), visited=visited)
             self._sleep()
         result.discovered = len(seen)
 

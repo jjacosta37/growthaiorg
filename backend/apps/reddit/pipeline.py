@@ -1,12 +1,14 @@
 """Reddit Agent: search → dedupe → score relevance → draft replies for the best posts."""
 
+from collections import Counter
 from datetime import timedelta
 
 from django.conf import settings
 from django.utils import timezone
 
 import llm
-from apps.agents.models import AgentConfig, AgentRun, AgentType, ExternalUsage
+from apps.agents.external import record_external
+from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
@@ -61,24 +63,35 @@ def store_new_posts(project, run, posts) -> tuple[list[RedditPost], int]:
 def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig) -> list[RedditPost]:
     subs = cfg.subreddits
     preview = ", ".join(f"r/{s}" for s in subs[:2]) + (f" +{len(subs) - 2} more" if len(subs) > 2 else "")
-    reporter.step(f"Reddit Agent scanning {preview}")
+    reporter.step(f"Reddit Agent scanning {preview}", subreddits=subs, keywords=cfg.keywords,
+                  time_window=cfg.time_window, max_posts=cfg.max_posts_per_run)
     source = get_source()
     result = source.search(RedditSearch(subreddits=subs, keywords=cfg.keywords, time_window=cfg.time_window,
                                         max_posts=cfg.max_posts_per_run, include_nsfw=cfg.include_nsfw))
     if result.provider == "apify":
-        ExternalUsage.objects.create(
-            project=run.project, agent_run=run, provider="apify", purpose="reddit_search",
-            resource_id=result.resource_id, external_run_id=result.external_run_id, items=len(result.posts),
-            cost_usd=result.cost_usd, error=result.error,
+        seconds = round(result.duration_ms / 1000, 1)
+        record_external(
+            run, reporter, provider="apify", purpose="reddit_search", resource_id=result.resource_id,
+            external_run_id=result.external_run_id, status=result.status, items=len(result.posts),
+            cost_usd=result.cost_usd, duration_ms=result.duration_ms, error=result.error,
+            message=f"Searched {result.queries} quer{'y' if result.queries == 1 else 'ies'} in {seconds}s: "
+                    f"{result.items_raw} results, {len(result.posts)} usable (${result.cost_usd})",
+            queries=result.queries, items_raw=result.items_raw,
         )
     if result.error and not result.posts:
         raise RuntimeError(f"Reddit search failed: {result.error}")
-    if result.error:
+    if result.error and result.provider != "apify":
         reporter.warning(f"Reddit search had a problem (continuing with {len(result.posts)} posts): {result.error}")
     new, dupes = store_new_posts(run.project, run, result.posts)
     run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes)
     run.save(update_fields=["stats"])
-    reporter.event(f"Found {len(result.posts)} posts, {len(new)} new")
+    # Counted here rather than in the adapter: which subreddits produced nothing is the fact
+    # this step used to hide, and it must not depend on which provider ran the search.
+    by_subreddit = Counter(p.subreddit for p in result.posts)
+    reporter.event(f"Found {len(result.posts)} posts, {len(new)} new",
+                   fetched=len(result.posts), new_posts=len(new), duplicates=dupes,
+                   queries=result.queries,
+                   by_subreddit={s: by_subreddit.get(s.strip().removeprefix("r/"), 0) for s in subs})
     return new
 
 
@@ -115,6 +128,30 @@ def fail_score(post: RedditPost, error: str, call=None) -> None:
     post.save()
 
 
+TOP_SCORES_REPORTED = 10
+SCORE_BANDS = ((0, 24), (25, 49), (50, 74), (75, 100))
+
+
+def report_scores(reporter, posts: list[RedditPost]) -> None:
+    """One summary event for a scoring pass, whichever path produced it.
+
+    Identifiers and scores only. `reason` is the model's rationale rather than post content,
+    and it is truncated here: the full text already lives on RedditPost.relevance_reason.
+    """
+    scored = [p for p in posts if p.score_status == RedditPost.ScoreStatus.SCORED]
+    failed = sum(p.score_status == RedditPost.ScoreStatus.FAILED for p in posts)
+    top = sorted(scored, key=lambda p: -(p.relevance_score or 0))[:TOP_SCORES_REPORTED]
+    reporter.event(
+        f"Scored {len(scored)} of {len(posts)} posts",
+        scored=len(scored), failed=failed,
+        distribution={f"{lo}-{hi}": sum(lo <= (p.relevance_score or 0) <= hi for p in scored)
+                      for lo, hi in SCORE_BANDS},
+        top=[{"reddit_id": p.reddit_id, "subreddit": p.subreddit, "score": p.relevance_score,
+              "reply_worthwhile": p.reply_worthwhile, "reason": (p.relevance_reason or "")[:200]}
+             for p in top],
+    )
+
+
 def score_sync(run, reporter, posts: list[RedditPost]) -> None:
     reporter.step(f"Scoring {len(posts)} posts")
     last_exc = None
@@ -129,6 +166,7 @@ def score_sync(run, reporter, posts: list[RedditPost]) -> None:
     if failed:
         # One report for the batch, not one per post: they fail for the same reason.
         reporter.error(f"{failed} post(s) couldn't be scored", exc=last_exc)
+    report_scores(reporter, posts)
 
 
 def submit_scoring_batch(run, reporter, posts: list[RedditPost]) -> None:
@@ -157,7 +195,9 @@ def apply_batch_results(run, reporter, b: LLMBatch) -> list[RedditPost]:
     failed = sum(not r.ok for r in results.values())
     if failed:
         reporter.error(f"{failed} post(s) couldn't be scored")
-    return list(posts.values())
+    scored_posts = list(posts.values())
+    report_scores(reporter, scored_posts)
+    return scored_posts
 
 
 # --- Drafting ---------------------------------------------------------------------------
@@ -178,7 +218,10 @@ def draft_replies(run, reporter, cfg: RedditAgentConfig, posts: list[RedditPost]
     run.stats.update(scored=scored, above_threshold=len(candidates), threshold=cfg.relevance_threshold)
     run.save(update_fields=["stats"])
     reporter.event(
-        f"{len(candidates)} of {scored} scored posts are worth a reply (threshold {cfg.relevance_threshold})"
+        f"{len(candidates)} of {scored} scored posts are worth a reply (threshold {cfg.relevance_threshold})",
+        scored=scored, above_threshold=len(candidates), threshold=cfg.relevance_threshold,
+        candidates=[{"reddit_id": p.reddit_id, "subreddit": p.subreddit, "score": p.relevance_score}
+                    for p in sorted(candidates, key=lambda p: -p.relevance_score)],
     )
     drafted = 0
     for post in sorted(candidates, key=lambda p: -p.relevance_score):

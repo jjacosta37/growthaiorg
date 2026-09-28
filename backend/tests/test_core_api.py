@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -44,3 +46,49 @@ def test_project_get_and_patch_competitors(client, project):
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["competitors"] == [{"name": "Globex", "url": "https://globex.example"}]
+
+
+@pytest.fixture
+def anon():
+    # The throttle counts in the default cache, which outlives a single test.
+    from django.core.cache import cache
+
+    cache.clear()
+    return APIClient(enforce_csrf_checks=True)
+
+
+def test_waitlist_signup_is_public_and_needs_no_csrf(anon):
+    from apps.core.models import WaitlistSignup
+
+    resp = anon.post("/api/waitlist/", {"email": " Founder@Example.com ", "source": "hero"}, format="json")
+    assert resp.status_code == 201
+    signup = WaitlistSignup.objects.get()
+    assert (signup.email, signup.source) == ("founder@example.com", "hero")
+
+
+def test_waitlist_repeat_email_looks_the_same(anon):
+    from apps.core.models import WaitlistSignup
+
+    for _ in range(2):
+        assert anon.post("/api/waitlist/", {"email": "a@example.com"}, format="json").status_code == 201
+    assert WaitlistSignup.objects.count() == 1
+
+
+def test_waitlist_rejects_bad_email(anon):
+    resp = anon.post("/api/waitlist/", {"email": "not-an-email"}, format="json")
+    assert resp.status_code == 400
+
+
+def test_waitlist_logs_the_id_not_the_email(anon, caplog):
+    caplog.set_level(logging.INFO, logger="apps.core.views")
+    anon.post("/api/waitlist/", {"email": "private@example.com", "source": "cta"}, format="json")
+    assert "waitlist signup" in caplog.text
+    assert "private@example.com" not in caplog.text
+
+
+def test_waitlist_is_throttled(anon):
+    codes = [
+        anon.post("/api/waitlist/", {"email": f"u{i}@example.com"}, format="json").status_code
+        for i in range(11)
+    ]
+    assert codes[:10] == [201] * 10 and codes[10] == 429

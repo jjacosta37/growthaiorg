@@ -83,6 +83,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 50,
     "EXCEPTION_HANDLER": "config.exceptions.exception_handler",
+    # Only views that set a throttle_scope are throttled; today that is the public waitlist form.
+    "DEFAULT_THROTTLE_RATES": {"waitlist": "10/hour"},
 }
 # The schema and Swagger UI are unauthenticated by drf-spectacular's default, so they are served
 # only where that is wanted: on by default for local work and CI, off in prod (see prod.py).

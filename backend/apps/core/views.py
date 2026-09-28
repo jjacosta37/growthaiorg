@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import authenticate, login, logout
 from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
@@ -6,17 +8,21 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Project
+from .models import Project, WaitlistSignup
 from .selection import NoProjectSelected, current_project, select_project
 from .serializers import (
     LoginSerializer,
     ProjectListSerializer,
     ProjectSerializer,
     UserSerializer,
+    WaitlistSerializer,
 )
 from .status import build_status
+
+log = logging.getLogger(__name__)
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -144,3 +150,28 @@ class StatusView(APIView):
     @extend_schema(responses={200: dict})
     def get(self, request):
         return Response(build_status(current_project(request)))
+
+
+class WaitlistView(APIView):
+    """The landing page's waitlist form. Public and throttled per client.
+
+    A repeat email answers the same as a new one, so the form can't be used to find out
+    who is already on the list.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "waitlist"
+
+    @extend_schema(request=WaitlistSerializer, responses={201: None})
+    def post(self, request):
+        data = WaitlistSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        signup, created = WaitlistSignup.objects.get_or_create(
+            email=data.validated_data["email"],
+            defaults={"source": data.validated_data["source"]},
+        )
+        if created:
+            log.info("waitlist signup id=%s source=%s", signup.pk, signup.source or "-")
+        return Response(status=status.HTTP_201_CREATED)

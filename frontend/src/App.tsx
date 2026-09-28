@@ -7,6 +7,7 @@ import { DetailSkeleton } from "./components/feedback";
 import { setProjectId, setUnauthenticatedHandler } from "./lib/api";
 import { keys, useMe, useProject, useProjects } from "./lib/queries";
 import LoginPage from "./features/auth/LoginPage";
+import LandingPage from "./features/landing/LandingPage";
 import OnboardingPage from "./features/onboarding/OnboardingPage";
 import InboxPage from "./features/inbox/InboxPage";
 import AgentPage from "./features/agents/AgentPage";
@@ -57,12 +58,21 @@ export default function App() {
     }
   }, [hasNoProject, needsOnboarding, location.pathname, navigate]);
 
+  // Visitors to / see the landing page straight away rather than an app skeleton while
+  // the session check is in flight; a signed-in user is sent on to the inbox once it lands.
   if (me.isLoading) {
-    return <DetailSkeleton />;
+    return location.pathname === "/" ? <LandingPage /> : <DetailSkeleton />;
   }
 
+  // Signed out: / is the public landing page; every other path (including /login and
+  // deep links into the app) shows the login screen.
   if (!signedIn) {
-    return <LoginPage />;
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
   }
 
   return (

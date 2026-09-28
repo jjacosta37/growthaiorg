@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import Project
+from .models import Project, WaitlistSignup
 from .selection import SESSION_KEY
 
 
@@ -51,3 +51,11 @@ class ProjectListSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.setdefault("name", Project.DEFAULT_NAME)
         return super().create(validated_data)
+
+
+class WaitlistSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=WaitlistSignup._meta.get_field("email").max_length)
+    source = serializers.CharField(max_length=40, required=False, allow_blank=True, default="")
+
+    def validate_email(self, value):
+        return value.strip().lower()

@@ -101,6 +101,13 @@ export function useLogin() {
   });
 }
 
+/** The landing page's waitlist form. Public: works without a session. */
+export function useJoinWaitlist() {
+  return useMutation({
+    mutationFn: (body: { email: string; source: string }) => api.post<void>("/waitlist/", body),
+  });
+}
+
 export function useLogout() {
   const qc = useQueryClient();
   return useMutation({

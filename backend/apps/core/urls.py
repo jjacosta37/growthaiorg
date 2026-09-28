@@ -13,4 +13,5 @@ urlpatterns = [
     path("projects/<int:pk>/select/", views.ProjectSelectView.as_view()),
     path("status/", views.StatusView.as_view()),
     path("health/", views.HealthView.as_view()),
+    path("waitlist/", views.WaitlistView.as_view()),
 ]

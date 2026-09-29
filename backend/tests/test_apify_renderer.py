@@ -7,14 +7,15 @@ from providers.crawl import ApifyRenderer
 class FakeApify:
     def __init__(self, run, items=(), error=None):
         self.run, self.items, self.error = run, list(items), error
-        self.calls = []
+        self.calls, self.loggers = [], []
 
     def actor(self, actor_id):
         fake = self
 
         class Actor:
-            def call(self, run_input, run_timeout):
+            def call(self, run_input, run_timeout, logger):
                 fake.calls.append((actor_id, run_input))
+                fake.loggers.append(logger)
                 if fake.error:
                     raise fake.error
                 return fake.run
@@ -49,6 +50,7 @@ def test_render_maps_items_and_cost():
     assert run_input["maxCrawlDepth"] == 0 and run_input["maxCrawlPages"] == 2
     assert run_input["startUrls"] == [{"url": "https://acme.example/pricing"}, {"url": "https://acme.example/"}]
     assert run_input["crawlerType"].startswith("playwright")
+    assert client.loggers == [None]  # the actor's own log must not reach ours (or Sentry)
     assert [(p.url, p.title, p.text) for p in r.pages] == [
         ("https://acme.example/pricing", "Pricing | OW", "# Pricing\nOne plan."),  # markdown preferred
         ("https://acme.example/", "", "Home text"),

@@ -52,14 +52,15 @@ def test_search_urls_one_per_subreddit_and_query():
 
 class FakeApify:
     def __init__(self, items, status="SUCCEEDED", error=None):
-        self.items, self.status, self.error, self.inputs = items, status, error, []
+        self.items, self.status, self.error, self.inputs, self.loggers = items, status, error, [], []
 
     def actor(self, actor_id):
         fake = self
 
         class A:
-            def call(self, run_input, run_timeout):
+            def call(self, run_input, run_timeout, logger):
                 fake.inputs.append(run_input)
+                fake.loggers.append(logger)
                 if fake.error:
                     raise fake.error
                 return SimpleNamespace(id="run9", status=fake.status, usage_total_usd=0.02, default_dataset_id="d")
@@ -92,6 +93,7 @@ def test_search_dedupes_sorts_caps_and_costs():
     run_input = client.inputs[0]
     assert len(run_input["startUrls"]) == 2 and run_input["crawlCommentsPerPost"] is False
     assert run_input["maxPostsCount"] >= 1
+    assert client.loggers == [None]  # actor log not streamed into ours (see providers/crawl/render.py)
 
 
 def test_search_failures():

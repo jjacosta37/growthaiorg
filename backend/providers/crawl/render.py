@@ -85,7 +85,10 @@ class ApifyRenderer:
         failure degrades to unrendered pages rather than taking the crawl down."""
         started = time.monotonic()
         try:
-            run = self.client.actor(self.actor_id).call(run_input=self.build_input(urls), run_timeout=self.timeout)
+            # logger=None: by default the client streams the actor's log into a Python logger and
+            # guesses each line's level from its text, so a browser console line containing
+            # "NS_ERROR_FAILURE" became an ERROR and a Sentry issue. The run's status is our signal.
+            run = self.client.actor(self.actor_id).call(run_input=self.build_input(urls), run_timeout=self.timeout, logger=None)
         except Exception as exc:  # network/auth/actor errors: degrade to unrendered pages
             result.duration_ms = int((time.monotonic() - started) * 1000)
             log.warning("apify render failed: %s", exc, exc_info=True)

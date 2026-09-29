@@ -135,7 +135,8 @@ class ApifyRedditSource:
         error string so the pipeline can carry on (or stop) with the facts in hand."""
         started = time.monotonic()
         try:
-            run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout)
+            # logger=None: see ApifyRenderer._render (actor log lines must not become Sentry issues).
+            run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout, logger=None)
         except Exception as exc:  # network/auth/actor failure: surface it on the run
             result.duration_ms = int((time.monotonic() - started) * 1000)
             log.warning("apify reddit search failed: %s", exc, exc_info=True)

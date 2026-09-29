@@ -1,2 +1,5 @@
-node_modules
-dist
+# `**/` so each pattern matches at any depth, not only at the build context's root
+**/node_modules
+**/dist
+**/.env*
+**/*.tsbuildinfo

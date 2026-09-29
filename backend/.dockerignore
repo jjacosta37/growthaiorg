@@ -1,4 +1,8 @@
-__pycache__
-*.pyc
-.pytest_cache
+# `**/` so each pattern matches at any depth, not only at the build context's root
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+**/.env*
 staticfiles

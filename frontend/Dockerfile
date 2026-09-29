@@ -1,4 +1,4 @@
-# Local development only. Production builds run on Render as a static site.
+# Local development only. Production uses Dockerfile.prod (or the Render static site).
 FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./

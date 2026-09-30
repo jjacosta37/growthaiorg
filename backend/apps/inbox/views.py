@@ -11,6 +11,8 @@ from apps.agents.serializers import AgentRunSerializer
 from apps.agents.tasks import regenerate_draft_task
 from apps.core.errors import validation_errors
 from apps.core.selection import current_project
+from apps.feedback import services as feedback
+from apps.feedback.models import AgentFeedback
 
 from . import services
 from .models import Draft
@@ -59,7 +61,7 @@ class DraftDetailView(generics.RetrieveAPIView):
     serializer_class = DraftDetailSerializer
 
     def get_queryset(self):
-        return drafts_qs(self.request).prefetch_related("versions")
+        return drafts_qs(self.request).prefetch_related("versions", "feedback")
 
 
 class _DraftAction(APIView):
@@ -67,7 +69,7 @@ class _DraftAction(APIView):
         return generics.get_object_or_404(drafts_qs(request), pk=pk)
 
     def detail(self, request, draft) -> Response:
-        draft = drafts_qs(request).prefetch_related("versions").get(pk=draft.pk)
+        draft = drafts_qs(request).prefetch_related("versions", "feedback").get(pk=draft.pk)
         return Response(DraftDetailSerializer(draft).data)
 
 
@@ -99,8 +101,11 @@ class RegenerateView(_DraftAction):
         if AgentRun.objects.filter(kind=AgentRun.Kind.REGENERATE_DRAFT, status__in=AgentRun.ACTIVE,
                                    params__draft_id=draft.pk).exists():
             return Response({"detail": "This draft is already regenerating"}, status=status.HTTP_409_CONFLICT)
+        params = dict(data.validated_data)
+        if params.pop("remember"):
+            feedback.record(draft, source=AgentFeedback.Source.INSTRUCTION, text=params["instruction"])
         run = AgentRun.objects.create(project=draft.project, kind=AgentRun.Kind.REGENERATE_DRAFT,
-                                      params={"draft_id": draft.pk, **data.validated_data})
+                                      params={"draft_id": draft.pk, **params})
         transaction.on_commit(lambda: regenerate_draft_task.delay(run.id))
         return Response(AgentRunSerializer(run).data, status=status.HTTP_202_ACCEPTED)
 

@@ -24,7 +24,8 @@ export type RunKind =
   | "reddit"
   | "content"
   | "x"
-  | "regenerate_draft";
+  | "regenerate_draft"
+  | "digest_feedback";
 export type RunTrigger = "scheduled" | "manual";
 export type RunStatus =
   | "queued"
@@ -152,6 +153,7 @@ export interface RedditConfig {
   time_window: "hour" | "day" | "week";
   include_nsfw: boolean;
   batch_scheduled_scoring: boolean;
+  guidance: string;
 }
 
 export interface ContentConfig {
@@ -243,6 +245,8 @@ export interface DraftListItem {
 
 export interface RedditCommentContent {
   body: string;
+  /** Who the model thought it was writing for, from the poster's own words. */
+  poster_read?: string;
 }
 
 export interface XPostContent {
@@ -315,6 +319,37 @@ export interface DraftDetail extends DraftListItem {
   posted_url: string;
   dismiss_reason: DismissReason;
   dismiss_note: string;
+  feedback: DraftFeedback[];
+}
+
+/* --------------------------------------------------------------- feedback */
+
+export type FeedbackRating = "up" | "down" | "";
+export type FeedbackSource = "explicit" | "instruction";
+
+export interface DraftFeedback {
+  id: number;
+  source: FeedbackSource;
+  rating: FeedbackRating;
+  text: string;
+  created_at: string;
+  digested_at: string | null;
+}
+
+export interface FeedbackEntry extends DraftFeedback {
+  draft: number | null;
+  draft_title: string;
+}
+
+/** /api/agents/<type>/learnings/ */
+export interface Learnings {
+  writing: string;
+  selection: string;
+  source: "ai" | "human";
+  updated_at: string;
+  pending: number;
+  digesting: boolean;
+  entries: FeedbackEntry[];
 }
 
 /* ---------------------------------------------------------------- context */

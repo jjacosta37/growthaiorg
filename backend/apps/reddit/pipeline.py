@@ -10,6 +10,7 @@ import llm
 from apps.agents.external import record_external
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
+from apps.feedback.services import learning_variables, selection_learnings
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
 from apps.inbox.nudges import nudge_instruction
@@ -107,6 +108,7 @@ def post_variables(post: RedditPost) -> dict:
         "subreddit": post.subreddit, "title": post.title, "body": body, "upvotes": post.upvotes,
         "num_comments": post.num_comments, "flair": post.flair, "age_hours": age_hours,
         "author_role": policy_for(post.project).author_role,
+        "learnings_selection": selection_learnings(post.project, AgentType.REDDIT),
     }
 
 
@@ -204,8 +206,14 @@ def apply_batch_results(run, reporter, b: LLMBatch) -> list[RedditPost]:
 
 
 def comment_variables(post: RedditPost, project, *, previous: str = "", instruction: str = "") -> dict:
-    return {**post_variables(post), "project_name": project.name, "reason": post.relevance_reason,
+    return {**post_variables(post), **learning_variables(project, AgentType.REDDIT),
+            "project_name": project.name, "reason": post.relevance_reason,
+            "guidance": load_config(project).guidance.strip(),
             "previous_draft": previous, "instruction": instruction}
+
+
+def comment_content(parsed) -> dict:
+    return {"body": parsed.body, "poster_read": parsed.poster_read.strip()}
 
 
 def draft_replies(run, reporter, cfg: RedditAgentConfig, posts: list[RedditPost]) -> None:
@@ -232,7 +240,7 @@ def draft_replies(run, reporter, cfg: RedditAgentConfig, posts: list[RedditPost]
             reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {exc}", exc=exc)
             continue
         draft = services.create_draft(run.project, agent_type=AgentType.REDDIT, kind=DraftKind.REDDIT_COMMENT,
-                                      content={"body": result.parsed.body}, result=result, run=run,
+                                      content=comment_content(result.parsed), result=result, run=run,
                                       source_reddit_post=post)
         compliance.lint(draft, run)
         drafted += 1
@@ -279,7 +287,7 @@ def regenerate(draft: Draft, nudge: str, instruction: str, run) -> DraftVersion:
     variables = comment_variables(post, draft.project, previous=draft.current_version.content["body"],
                                   instruction=text)
     result = llm.complete("reddit.comment", variables, project=draft.project, run=run)
-    version = services.add_version(draft, {"body": result.parsed.body}, source=DraftVersion.Source.AI_REGENERATED,
+    version = services.add_version(draft, comment_content(result.parsed), source=DraftVersion.Source.AI_REGENERATED,
                                    result=result, nudge=nudge, instruction=instruction)
     compliance.lint(draft, run)
     return version

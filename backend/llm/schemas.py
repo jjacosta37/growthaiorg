@@ -64,8 +64,20 @@ class RelevanceScore(BaseModel):
 
 @register
 class RedditComment(BaseModel):
+    # First, so the model reads the poster before it writes the reply.
+    poster_read: str = Field(description="One line: who the poster seems to be (expertise, role, situation), "
+                                         "based only on what they wrote, or 'no cues'.")
     body: str = Field(description="The comment, in Reddit markdown.")
     mentions_product: bool = Field(description="True if the comment mentions the product by name.")
+
+
+# --- Feedback (all agents) --------------------------------------------------------------
+
+
+@register
+class FeedbackDigest(BaseModel):
+    writing: str = Field(description="Markdown bullets: how to write drafts, from the feedback. Empty if none.")
+    selection: str = Field(description="Markdown bullets: which items to draft for or skip. Empty if none.")
 
 
 # --- Compliance lint (all agents) -------------------------------------------------------

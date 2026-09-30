@@ -52,6 +52,7 @@ class AgentRun(models.Model):
         CONTENT = "content"
         X = "x"
         REGENERATE_DRAFT = "regenerate_draft"
+        DIGEST_FEEDBACK = "digest_feedback"
 
     class Trigger(models.TextChoices):
         SCHEDULED = "scheduled"

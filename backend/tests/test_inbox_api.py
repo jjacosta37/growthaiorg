@@ -57,7 +57,7 @@ def test_edit_keeps_original_ai_version(client, drafts):
     assert resp.status_code == 200
     versions = resp.json()["versions"]
     assert [(v["n"], v["source"]) for v in versions] == [(1, "ai_initial"), (2, "human_edit")]
-    assert resp.json()["content"] == {"body": "My tweaked reply"}
+    assert resp.json()["content"] == {"body": "My tweaked reply", "poster_read": "no cues"}  # read carried over
 
 
 def test_dismiss_restore_post_read_and_counts(client, drafts):

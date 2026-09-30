@@ -27,7 +27,10 @@ def reddit_responder(comment_body="Weekly planning sessions are common. Here's h
             score, worth = SCORES[marker]
             return message(json.dumps({"score": score, "reason": f"because {marker}", "reply_worthwhile": worth}))
         if title == "RedditComment":
-            return message(json.dumps({"body": comment_body, "mentions_product": "Acme" in comment_body}))
+            return message(json.dumps({"poster_read": "no cues", "body": comment_body,
+                                       "mentions_product": "Acme" in comment_body}))
+        if title == "FeedbackDigest":
+            return message(json.dumps({"writing": "- Keep replies short.", "selection": "- Skip meme posts."}))
         if title == "ComplianceLint":
             return message(json.dumps({"flags": lint_flags or []}))
         raise AssertionError(f"unexpected request {title}")

@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/", include("apps.agents.urls")),
     path("api/", include("apps.context.urls")),
     path("api/", include("apps.inbox.urls")),
+    path("api/", include("apps.feedback.urls")),
     path("api/", include("apps.content.urls")),
     path("api/", include("apps.stats.urls")),
 ]

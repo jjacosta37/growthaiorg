@@ -13,6 +13,8 @@ class RedditAgentConfig(BaseModel):
     # Scheduled runs score via the Message Batches API (50% cheaper, results in minutes to hours).
     # "Run now" always scores synchronously.
     batch_scheduled_scoring: bool = True
+    # The user's own standing instructions, given to every reply (below the content rules).
+    guidance: str = Field("", max_length=2000, description="Custom instructions for every reply")
 
     @field_validator("subreddits")
     @classmethod

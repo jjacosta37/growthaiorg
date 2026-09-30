@@ -117,6 +117,8 @@ render.yaml, .env.example, README.md, CLAUDE.md
 - **BlogTopic**: project, title, angle, target_keywords, status (proposed/drafted/rejected), requested_by_user.
 - **Draft**: project, agent_type, kind (reddit_comment/x_post/x_thread/blog_post), status (new/posted/dismissed), source_reddit_post (FK), blog_topic (FK), current_version (FK), read_at, posted_at, posted_url, dismiss_reason (not_relevant/already_answered/too_promotional/other), dismiss_note, compliance_flags JSON, created_at.
 - **DraftVersion**: draft, n, source (ai_initial/ai_regenerated/human_edit), content JSON (validated per kind), nudge, prompt_name/version, model, llm_call FK, created_at. The eval dataset is the last AI version compared with the human-edited or posted version, plus the dismiss reasons.
+- **AgentFeedback** (`apps/feedback/`): project, agent_type, draft/draft_version FKs, source (the feedback box, or a regenerate instruction with "remember" ticked), rating (up/down), text, digested_at. Dismissals are deliberately not used as feedback.
+  **AgentLearnings**: one per project and agent: `writing_md` + `selection_md`, source (ai/human). A `digest_feedback` run folds new feedback into it (`prompts/feedback/digest`). The Reddit comment prompt gets the writing learnings plus the undigested entries raw; scoring gets the selection learnings. The Reddit config also carries `guidance` (the user's custom instructions).
 - **LLMCall**, **LLMBatch** (anthropic_batch_id, status, agent_run, request_count, submitted_at/ended_at), **ApifyRun** (actor_id, apify_run_id, items, cost_usd from `usageTotalUsd`, agent_run).
 
 ## Pipelines

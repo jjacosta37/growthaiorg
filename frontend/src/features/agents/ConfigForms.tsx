@@ -123,6 +123,19 @@ export function RedditConfigForm({
         </Field>
       </div>
 
+      <Field
+        label="Custom instructions"
+        hint="Applied to every reply this agent writes. The content rules still take priority."
+      >
+        <Textarea
+          rows={4}
+          maxLength={2000}
+          value={draft.guidance}
+          onChange={(e) => set("guidance", e.target.value)}
+          placeholder="Keep replies under 120 words. Write in a friendly, first-person voice."
+        />
+      </Field>
+
       <SaveBar dirty={dirty} saving={saving} onSave={() => onSave(draft)} onReset={reset} />
     </>
   );

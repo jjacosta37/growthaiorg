@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class RedditCommentContent(BaseModel):
     body: str = Field(min_length=1)
+    poster_read: str = ""  # who the model thought it was writing for; shown next to the draft
 
 
 class XContent(BaseModel):

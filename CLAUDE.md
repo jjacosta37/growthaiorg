@@ -16,6 +16,9 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
 - Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands. The token names, components and screens are specified in `docs/design-brief.md` (the Claude Design brief); build against those names.
 
+## Claude Code on the web (sandbox)
+`.claude/hooks/session-start.sh` prepares a cloud session: a Python 3.13 venv at `.venv` (on `PATH`), Postgres on `localhost:5433` (role/db `luka`, migrated and bootstrapped with `admin`/`admin`), Redis on 6379, `frontend/node_modules`, and `REDDIT_SOURCE=fake`. No Docker. Checks: `pytest` and `ruff check .` in `backend/`; `npm run lint` and `npm test` in `frontend/`. Run the app with `python manage.py runserver` (`config.settings.dev`) and `npm run dev`. Real LLM or Apify calls need keys in the environment's secrets.
+
 ## Logging and error reporting
 
 Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.

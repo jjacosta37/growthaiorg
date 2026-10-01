@@ -1,8 +1,9 @@
 from django.db import transaction
-from django.db.models import Count, F
+from django.db.models import Count, F, QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import generics, status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -58,17 +59,23 @@ class DraftListView(generics.ListAPIView):
 
 
 class DraftDetailView(generics.RetrieveAPIView):
+    """GET one draft with its versions and feedback."""
+
     serializer_class = DraftDetailSerializer
 
-    def get_queryset(self):
+    def get_queryset(self) -> QuerySet[Draft]:
+        """The caller's drafts, with what the detail pane renders prefetched."""
         return drafts_qs(self.request).prefetch_related("versions", "feedback")
 
 
 class _DraftAction(APIView):
+    """Base for the draft action views: scoped lookup, and the detail response they return."""
+
     def get_draft(self, request, pk) -> Draft:
         return generics.get_object_or_404(drafts_qs(request), pk=pk)
 
-    def detail(self, request, draft) -> Response:
+    def detail(self, request: Request, draft: Draft) -> Response:
+        """The draft re-read with its versions and feedback, as the detail pane shows it."""
         draft = drafts_qs(request).prefetch_related("versions", "feedback").get(pk=draft.pk)
         return Response(DraftDetailSerializer(draft).data)
 
@@ -89,8 +96,15 @@ class EditView(_DraftAction):
 
 
 class RegenerateView(_DraftAction):
+    """POST {nudge?, instruction?, remember?}: regenerate a draft in the background."""
+
     @extend_schema(request=RegenerateSerializer, responses={202: AgentRunSerializer})
-    def post(self, request, pk):
+    def post(self, request: Request, pk: int) -> Response:
+        """Start the regeneration, or 409 if the draft isn't new or is already regenerating.
+
+        With `remember`, the instruction is also stored as feedback for future drafts, but only
+        once the request has passed the 409 checks.
+        """
         data = RegenerateSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         draft = self.get_draft(request, pk)

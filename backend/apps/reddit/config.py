@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class RedditAgentConfig(BaseModel):
+    """The Reddit Agent's settings, edited on its agent page. Every call multiplier is bounded."""
+
     subreddits: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
     relevance_threshold: int = Field(70, ge=0, le=100)

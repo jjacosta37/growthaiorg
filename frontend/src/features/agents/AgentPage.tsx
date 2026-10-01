@@ -2,7 +2,7 @@
  * Agent pages: one layout, three config bodies.
  * From "Luka - Agent Pages.dc.html".
  *
- * Reddit adds the skipped list; Content adds the topic backlog and request form.
+ * Reddit adds its learnings and the skipped list; Content adds the topic backlog and request form.
  */
 
 import { useState } from "react";
@@ -24,6 +24,7 @@ import {
 } from "../../lib/queries";
 import { AGENT_TYPES, type AgentType } from "../../lib/types";
 import { ContentConfigForm, RedditConfigForm, XConfigForm } from "./ConfigForms";
+import { LearningsCard } from "./LearningsCard";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SkippedList } from "./SkippedList";
 import { TopicBacklog } from "./TopicBacklog";
@@ -223,6 +224,7 @@ function AgentBody({ type }: { type: AgentType }) {
           </div>
         </section>
 
+        {type === "reddit" && <LearningsCard type={type} />}
         {type === "reddit" && <SkippedList threshold={(data.config as never as { relevance_threshold: number }).relevance_threshold} />}
         {type === "content" && <TopicBacklog />}
       </div>

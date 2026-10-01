@@ -183,6 +183,7 @@ Luka's prompts are full of text we don't control: crawled pages, Reddit posts an
 | Suggest a policy pack | onboarding | Only known pack ids; falls back to `general`; a user-chosen policy is never overwritten |
 | Seed the Reddit agent's `subreddits` / `keywords` **only when they are empty** | onboarding | Pydantic `RedditAgentConfig`; tracked as a known concern (§14) |
 | Score posts, flag compliance issues | reddit / lint | Stored fields only |
+| Write an agent's learnings (`AgentLearnings.writing_md` / `selection_md`), which later drafting and scoring prompts read | `digest_feedback` run (`apps/feedback/`) | Only from the caller's project's feedback; third-party text in the digest input (post titles, draft excerpts) is escaped and delimited as data; shown, editable and rebuildable on the agent page; only shapes drafts and scores, which a human triages |
 
 **Rules:**
 - **No new side effects from model output without a human in the loop.** Examples: publishing, sending, changing schedules or `enabled`, raising limits, or calling a new external API. A new side effect is **High** unless a human confirms it in the UI.
@@ -260,6 +261,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - the number of subreddits and keywords (Reddit runs one search per pair)
   - `web_search_max_uses`
   - `max_tokens`
+  - feedback digests: one active digest per project (rebuild returns 409 while one runs), new feedback waits `FEEDBACK_DIGEST_DELAY_SECONDS` so a burst is one call, at most 100 entries per digest, and at most 20 undigested entries passed to a drafting call
 - **Schedules:** an agent cron must not be able to fire more often than a sensible minimum.
 - **"Run now" and regenerate** refuse to start while a run of the same kind is active (the 409 path). Keep that guard on any new trigger.
 - **Unbounded spend** that a single tenant can trigger is **High**. A bounded but generous limit is Medium at most.

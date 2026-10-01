@@ -74,13 +74,16 @@ export function RedditRenderer({
           <span className="card__title">Your comment</span>
           {post?.author && <span className="subtle">Replying in r/{post.subreddit}</span>}
         </div>
-        <div className="card__body">
+        <div className="card__body stack" style={{ gap: "var(--space-3)" }}>
+          {content.poster_read && content.poster_read.toLowerCase() !== "no cues" && (
+            <span className="detail__poster-read">Written for: {content.poster_read}</span>
+          )}
           {editing ? (
             <Textarea
               autoFocus
               rows={10}
               value={content.body}
-              onChange={(e) => onChange({ body: e.target.value })}
+              onChange={(e) => onChange({ ...content, body: e.target.value })}
             />
           ) : (
             <div className="detail__comment">{content.body}</div>

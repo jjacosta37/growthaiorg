@@ -16,7 +16,7 @@ import {
   ErrorState,
   useToast,
 } from "../../components/feedback";
-import { Button, Field, Select, TextInput, Textarea } from "../../components/primitives";
+import { Button, Field, Select, TextInput, Textarea, Toggle } from "../../components/primitives";
 import { ApiError } from "../../lib/api";
 import { DISMISS_REASON_LABEL, KIND_LABEL, dateTime, relative } from "../../lib/format";
 import {
@@ -29,6 +29,7 @@ import {
 } from "../../lib/queries";
 import type { DismissReason, DraftContent, DraftDetail as Draft, Nudge } from "../../lib/types";
 import { BlogRenderer } from "./BlogRenderer";
+import { FeedbackCard } from "./FeedbackCard";
 import { RedditRenderer } from "./RedditRenderer";
 import { XRenderer } from "./XRenderer";
 
@@ -89,11 +90,12 @@ export function DraftDetail({ draftId, onDone }: { draftId: number; onDone: () =
   }, [draft]);
 
   const runRegenerate = useCallback(
-    (nudge: Nudge, instruction?: string) => {
+    (nudge: Nudge, instruction?: string, remember?: boolean) => {
       regenerate.mutate(
-        { nudge, instruction },
+        { nudge, instruction, remember },
         {
-          onSuccess: () => toast.show("Regeneration started"),
+          onSuccess: () =>
+            toast.show(remember ? "Regeneration started · remembered for future replies" : "Regeneration started"),
           onError: (error) =>
             toast.error(error instanceof ApiError ? error.detail : "Couldn't regenerate"),
         },
@@ -304,6 +306,8 @@ export function DraftDetail({ draftId, onDone }: { draftId: number; onDone: () =
 
         {renderer}
 
+        {draft.channel === "reddit" && <FeedbackCard draft={draft} />}
+
         {draft.versions.length > 1 && (
           <VersionHistory draft={draft} onView={setVersionOpen} />
         )}
@@ -378,10 +382,11 @@ export function DraftDetail({ draftId, onDone }: { draftId: number; onDone: () =
       <CustomNudgeDialog
         open={customOpen}
         busy={regenerate.isPending}
+        canRemember={draft.channel === "reddit"}
         onCancel={() => setCustomOpen(false)}
-        onConfirm={(instruction) => {
+        onConfirm={(instruction, remember) => {
           setCustomOpen(false);
-          runRegenerate("custom", instruction);
+          runRegenerate("custom", instruction, remember);
         }}
       />
 
@@ -573,15 +578,18 @@ function MarkPostedDialog({
 function CustomNudgeDialog({
   open,
   busy,
+  canRemember,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   busy: boolean;
+  canRemember: boolean;
   onCancel: () => void;
-  onConfirm: (instruction: string) => void;
+  onConfirm: (instruction: string, remember: boolean) => void;
 }) {
   const [instruction, setInstruction] = useState("");
+  const [remember, setRemember] = useState(false);
   return (
     <ConfirmDialog
       open={open}
@@ -589,7 +597,7 @@ function CustomNudgeDialog({
       confirmLabel="Regenerate"
       busy={busy}
       onCancel={onCancel}
-      onConfirm={() => instruction.trim() && onConfirm(instruction.trim())}
+      onConfirm={() => instruction.trim() && onConfirm(instruction.trim(), canRemember && remember)}
     >
       <Field label="What should change?">
         <Textarea
@@ -600,6 +608,13 @@ function CustomNudgeDialog({
           onChange={(e) => setInstruction(e.target.value)}
         />
       </Field>
+      {canRemember && (
+        <Toggle
+          checked={remember}
+          onChange={setRemember}
+          label="Remember for future replies"
+        />
+      )}
     </ConfirmDialog>
   );
 }

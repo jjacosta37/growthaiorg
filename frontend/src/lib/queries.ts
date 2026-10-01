@@ -30,7 +30,9 @@ import type {
   DraftDetail,
   DraftListItem,
   DraftStatus,
+  FeedbackRating,
   InboxCounts,
+  Learnings,
   Nudge,
   PolicyPack,
   Project,
@@ -54,6 +56,7 @@ export const keys = {
   agents: ["agents"] as const,
   agent: (type: AgentType) => ["agents", type] as const,
   agentRuns: (type: AgentType) => ["agents", type, "runs"] as const,
+  learnings: (type: AgentType) => ["agents", type, "learnings"] as const,
   skipped: (minScore?: number) => ["agents", "reddit", "skipped", minScore ?? null] as const,
   topics: (status?: BlogTopicStatus) => ["topics", status ?? "all"] as const,
   drafts: (filters: DraftFilters) => ["drafts", filters] as const,
@@ -404,12 +407,66 @@ export function useEditDraft(id: number) {
 export function useRegenerateDraft(id: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { nudge?: Nudge; instruction?: string }) =>
+    mutationFn: (body: { nudge?: Nudge; instruction?: string; remember?: boolean }) =>
       api.post<AgentRun>(`/drafts/${id}/regenerate/`, body),
-    onSuccess: () => {
+    onSuccess: (_run, body) => {
       void qc.invalidateQueries({ queryKey: keys.status });
       invalidateDraft(qc, id);
+      if (body.remember) void qc.invalidateQueries({ queryKey: ["agents"] });
     },
+  });
+}
+
+export function useDraftFeedback(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { rating?: FeedbackRating; text?: string }) =>
+      api.post<DraftDetail>(`/drafts/${id}/feedback/`, body),
+    onSuccess: (draft) => {
+      qc.setQueryData(keys.draft(id), draft);
+      void qc.invalidateQueries({ queryKey: keys.status });
+      void qc.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+/* -------------------------------------------------------------- learnings */
+
+export function useLearnings(type: AgentType) {
+  return useQuery({
+    queryKey: keys.learnings(type),
+    queryFn: () => api.get<Learnings>(`/agents/${type}/learnings/`),
+    // Poll while the digest is folding feedback in, so the card fills in on its own.
+    refetchInterval: (query) =>
+      query.state.data?.digesting ? ACTIVE_POLL_MS * 2 : query.state.data?.pending ? IDLE_POLL_MS : false,
+  });
+}
+
+export function useSaveLearnings(type: AgentType) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { writing?: string; selection?: string }) =>
+      api.patch<Learnings>(`/agents/${type}/learnings/`, body),
+    onSuccess: (data) => qc.setQueryData(keys.learnings(type), data),
+  });
+}
+
+export function useRebuildLearnings(type: AgentType) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<Learnings>(`/agents/${type}/learnings/rebuild/`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.learnings(type) });
+      void qc.invalidateQueries({ queryKey: keys.status });
+    },
+  });
+}
+
+export function useDeleteFeedback(type: AgentType) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.delete<void>(`/agents/${type}/feedback/${id}/`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.learnings(type) }),
   });
 }
 

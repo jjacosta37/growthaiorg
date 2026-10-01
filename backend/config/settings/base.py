@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.agents",
     "apps.context",
     "apps.inbox",
+    "apps.feedback",
     "apps.reddit",
     "apps.content",
     "apps.xagent",
@@ -188,6 +189,8 @@ APIFY_RENDER_ACTOR = env("APIFY_RENDER_ACTOR", default="apify/website-content-cr
 REDDIT_SOURCE = env("REDDIT_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)
 APIFY_REDDIT_ACTOR = env("APIFY_REDDIT_ACTOR", default="harshmaur/reddit-scraper")
 LLM_BATCH_POLL_SECONDS = env.int("LLM_BATCH_POLL_SECONDS", default=120)
+# Feedback is folded into the learnings digest this long after it arrives, so a burst costs one call.
+FEEDBACK_DIGEST_DELAY_SECONDS = env.int("FEEDBACK_DIGEST_DELAY_SECONDS", default=60)
 LLM_BATCH_MAX_AGE_HOURS = 24
 
 # Content policy packs (industry rules as data)

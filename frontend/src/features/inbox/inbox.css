@@ -176,3 +176,27 @@
   position: sticky;
   top: calc(var(--space-6) + 40px);
 }
+
+/* Feedback on a draft: thumbs up / down. */
+.feedback-rating {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.feedback-rating:hover {
+  border-color: var(--color-text-subtle);
+}
+
+.feedback-rating--active {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent);
+}
+
+.detail__poster-read {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

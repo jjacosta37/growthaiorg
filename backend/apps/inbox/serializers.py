@@ -76,11 +76,12 @@ class DraftDetailSerializer(DraftListSerializer):
     blog_topic = BlogTopicSummarySerializer(default=None)
     versions = DraftVersionSerializer(many=True)
     char_limit = serializers.SerializerMethodField()
+    feedback = serializers.SerializerMethodField()
 
     class Meta(DraftListSerializer.Meta):
         fields = [*DraftListSerializer.Meta.fields, "content", "copy_text", "open_url", "source_post",
                   "blog_topic", "compliance_flags", "versions", "char_limit", "posted_at", "posted_url",
-                  "dismiss_reason", "dismiss_note"]
+                  "dismiss_reason", "dismiss_note", "feedback"]
 
     def get_copy_text(self, obj) -> str:
         return as_text(obj.kind, obj.current_version.content)
@@ -93,6 +94,12 @@ class DraftDetailSerializer(DraftListSerializer):
             first = obj.current_version.content["posts"][0]
             return f"https://x.com/intent/post?{urlencode({'text': first})}"
         return ""
+
+    def get_feedback(self, obj) -> list[dict]:
+        from apps.feedback.serializers import FeedbackEntrySerializer
+
+        return [{k: v for k, v in e.items() if k not in ("draft", "draft_title")}
+                for e in FeedbackEntrySerializer(obj.feedback.all(), many=True).data]
 
     def get_char_limit(self, obj) -> int | None:
         if obj.kind not in ("x_post", "x_thread"):
@@ -109,8 +116,12 @@ class EditSerializer(serializers.Serializer):
 class RegenerateSerializer(serializers.Serializer):
     nudge = serializers.ChoiceField(choices=list(NUDGES), required=False, allow_blank=True, default="")
     instruction = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
+    # Also keep the instruction as feedback, so future drafts follow it too.
+    remember = serializers.BooleanField(required=False, default=False)
 
     def validate(self, data):
+        if data["remember"] and not data["instruction"].strip():
+            raise serializers.ValidationError("Only an instruction can be remembered")
         if data["nudge"] == "custom" and not data["instruction"].strip():
             raise serializers.ValidationError("A custom nudge needs an instruction")
         return data

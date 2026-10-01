@@ -79,6 +79,13 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 
 /* ------------------------------------------------------------------ labels */
 
+export const RATING_LABEL: Record<string, string> = { up: "👍", down: "👎" };
+
+export const FEEDBACK_SOURCE_LABEL: Record<string, string> = {
+  explicit: "Feedback",
+  instruction: "Remembered instruction",
+};
+
 export const CHANNEL_LABEL: Record<AgentType, string> = {
   reddit: "Reddit",
   content: "Blog",

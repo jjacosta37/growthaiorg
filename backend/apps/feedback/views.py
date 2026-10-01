@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from apps.agents.api import spec_or_404
 from apps.agents.models import AgentRun
+from apps.agents.runs import RunConflict
 from apps.core.selection import current_project
 from apps.inbox.serializers import DraftDetailSerializer
 from apps.inbox.views import drafts_qs
@@ -18,6 +19,7 @@ from .serializers import (
     LearningsSerializer,
     LearningsUpdateSerializer,
 )
+from .tasks import run_digest_task, start_digest
 
 ENTRIES_SHOWN = 50
 
@@ -72,13 +74,17 @@ class LearningsView(APIView):
 
 
 class LearningsRebuildView(APIView):
-    """Re-learn from every feedback entry, replacing the current learnings."""
+    """Re-learn from every feedback entry, replacing the current learnings. 409 while a digest runs."""
 
     @extend_schema(request=None, responses={202: dict})
     def post(self, request, agent_type):
         spec = spec_or_404(agent_type)
         project = current_project(request)
-        transaction.on_commit(lambda: services.schedule_digest(project.pk, spec.agent_type, rebuild=True))
+        try:
+            run = start_digest(project, spec.agent_type, rebuild=True)
+        except RunConflict as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        transaction.on_commit(lambda: run_digest_task.delay(run.id))
         return Response(learnings_payload(project, spec.agent_type), status=status.HTTP_202_ACCEPTED)
 
 

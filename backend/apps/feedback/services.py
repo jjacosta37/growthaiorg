@@ -1,6 +1,7 @@
 """Feedback capture and the variables prompts read. Pipelines call `learning_variables`; the inbox
 and agent APIs call `record`."""
 
+import html
 import logging
 
 from django.conf import settings
@@ -27,31 +28,32 @@ def record(draft, *, source: str, text: str = "", rating: str = "") -> AgentFeed
     return entry
 
 
-def schedule_digest(project_id: int, agent_type: str, *, rebuild: bool = False) -> None:
+def schedule_digest(project_id: int, agent_type: str) -> None:
     from .tasks import digest_feedback_task
 
-    digest_feedback_task.apply_async((project_id, agent_type), {"rebuild": rebuild},
-                                     countdown=0 if rebuild else settings.FEEDBACK_DIGEST_DELAY_SECONDS)
+    digest_feedback_task.apply_async((project_id, agent_type), countdown=settings.FEEDBACK_DIGEST_DELAY_SECONDS)
 
 
 def pending(project, agent_type: str):
     return AgentFeedback.objects.filter(project=project, agent_type=agent_type, digested_at__isnull=True)
 
 
+def tag_safe(text: str) -> str:
+    """Escape text placed inside a prompt's delimiter tags, so it can't close them."""
+    return html.escape(text, quote=True)
+
+
 def feedback_line(entry: AgentFeedback) -> dict:
-    """What a prompt sees of one entry: where it came from and what was said. No draft text."""
-    post = entry.draft.source_reddit_post if entry.draft_id and entry.draft else None
-    return {
-        "rating": entry.rating, "text": entry.text, "source": entry.source,
-        "where": f"r/{post.subreddit}: {post.title[:120]}" if post else "",
-    }
+    """What a drafting prompt sees of one entry: the rating and the user's own words. Nothing from
+    the post it was on: third-party text stays out of the system prompt."""
+    return {"rating": entry.rating, "text": tag_safe(entry.text), "source": entry.source}
 
 
 def learning_variables(project, agent_type: str) -> dict:
     """{learnings_writing, learnings_selection, recent_feedback} for a prompt. Empty when the
     user has given no feedback, so prompts render exactly as before."""
     learnings = AgentLearnings.objects.filter(project=project, agent_type=agent_type).first()
-    recent = pending(project, agent_type).select_related("draft__source_reddit_post")[:RECENT_FEEDBACK_LIMIT]
+    recent = pending(project, agent_type)[:RECENT_FEEDBACK_LIMIT]
     return {
         "learnings_writing": learnings.writing_md.strip() if learnings else "",
         "learnings_selection": learnings.selection_md.strip() if learnings else "",

@@ -8,19 +8,24 @@ from apps.agents.runs import RunReporter
 from apps.policy.service import policy_for
 
 from .models import AgentFeedback, AgentLearnings
-from .services import feedback_line, pending
+from .services import feedback_line, pending, tag_safe
 
 DIGEST_BATCH_LIMIT = 100  # entries folded in per call; the rest wait for the next run
 EXCERPT_CHARS = 300
 
 
 def entry_variables(entry: AgentFeedback) -> dict:
-    """An entry as the digest sees it: the feedback plus a short excerpt of the draft it was on,
-    so a comment like "too long" can be generalized. The excerpt goes to the model only."""
+    """An entry as the digest sees it: the feedback plus the post title and a short excerpt of the
+    draft, so a comment like "too long" can be generalized. Both are third-party or model text,
+    so they're escaped and the prompt treats them as data. They go to the model only."""
     content = entry.draft_version.content if entry.draft_version_id and entry.draft_version else {}
     body = content.get("body") or " ".join(content.get("posts", [])) or content.get("body_md", "")
     excerpt = body[:EXCERPT_CHARS] + ("…" if len(body) > EXCERPT_CHARS else "")
-    return {**feedback_line(entry), "excerpt": excerpt}
+    post = entry.draft.source_reddit_post if entry.draft_id and entry.draft else None
+    return {
+        **feedback_line(entry), "excerpt": tag_safe(excerpt),
+        "post_title": tag_safe(f"r/{post.subreddit}: {post.title[:120]}") if post else "",
+    }
 
 
 def digest_feedback(run, reporter: RunReporter) -> None:

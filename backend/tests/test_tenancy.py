@@ -14,6 +14,7 @@ from apps.content.models import BlogTopic
 from apps.context.documents import save_document
 from apps.core.models import Project
 from apps.core.selection import NoProjectSelected, current_project
+from apps.feedback.models import AgentFeedback, AgentLearnings
 from apps.inbox.models import Draft, DraftVersion
 
 pytestmark = pytest.mark.django_db
@@ -57,6 +58,7 @@ def test_a_draft_you_do_not_own_is_a_404(client, project, other_project):
         ("regenerate", {}),
         ("restore", {}),
         ("read", {}),
+        ("feedback", {"text": "remember this"}),
     ],
 )
 def test_draft_actions_refuse_another_tenants_draft(client, project, other_project, action, payload):
@@ -69,6 +71,7 @@ def test_draft_actions_refuse_another_tenants_draft(client, project, other_proje
     theirs.refresh_from_db()
     assert theirs.status == Draft.Status.NEW
     assert theirs.current_version.content == {"body": "secret"}
+    assert not AgentFeedback.objects.exists()
 
 
 def test_counts_and_stats_only_see_your_own(client, project, other_project):
@@ -125,6 +128,22 @@ def test_agent_config_is_per_project(client, project, other_client, other_projec
 
 
 # --- Choosing a project -------------------------------------------------------------------
+
+
+def test_learnings_and_feedback_are_scoped(client, project, other_project):
+    theirs = AgentFeedback.objects.create(project=other_project, agent_type="reddit", source="explicit",
+                                          draft=make_draft(other_project), text="their feedback")
+    AgentLearnings.objects.create(project=other_project, agent_type="reddit", writing_md="- their lesson")
+
+    data = client.get("/api/agents/reddit/learnings/").json()
+    assert data["entries"] == [] and data["writing"] == "" and data["pending"] == 0
+
+    assert client.delete(f"/api/agents/reddit/feedback/{theirs.pk}/").status_code == 404
+    assert AgentFeedback.objects.filter(pk=theirs.pk).exists()
+
+    assert client.patch("/api/agents/reddit/learnings/", {"writing": "- mine"}, format="json").status_code == 200
+    assert AgentLearnings.objects.get(project=other_project).writing_md == "- their lesson"
+    assert AgentLearnings.objects.get(project=project).writing_md == "- mine"
 
 
 def test_switching_project_changes_what_you_see(client, user, project):

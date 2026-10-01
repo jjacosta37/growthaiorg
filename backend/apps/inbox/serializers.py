@@ -69,6 +69,8 @@ class BlogTopicSummarySerializer(serializers.Serializer):
 
 
 class DraftDetailSerializer(DraftListSerializer):
+    """Everything the detail pane needs to render, copy and act on a draft, including its feedback."""
+
     content = serializers.JSONField(source="current_version.content")
     copy_text = serializers.SerializerMethodField()
     open_url = serializers.SerializerMethodField()
@@ -95,7 +97,8 @@ class DraftDetailSerializer(DraftListSerializer):
             return f"https://x.com/intent/post?{urlencode({'text': first})}"
         return ""
 
-    def get_feedback(self, obj) -> list[dict]:
+    def get_feedback(self, obj: Draft) -> list[dict]:
+        """Feedback given on this draft, newest first, without the per-draft fields."""
         from apps.feedback.serializers import FeedbackEntrySerializer
 
         return [{k: v for k, v in e.items() if k not in ("draft", "draft_title")}
@@ -114,12 +117,15 @@ class EditSerializer(serializers.Serializer):
 
 
 class RegenerateSerializer(serializers.Serializer):
+    """Body of `POST /api/drafts/<id>/regenerate/`: a preset nudge and/or an instruction."""
+
     nudge = serializers.ChoiceField(choices=list(NUDGES), required=False, allow_blank=True, default="")
     instruction = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
     # Also keep the instruction as feedback, so future drafts follow it too.
     remember = serializers.BooleanField(required=False, default=False)
 
-    def validate(self, data):
+    def validate(self, data: dict) -> dict:
+        """A custom nudge, or `remember`, needs an instruction."""
         if data["remember"] and not data["instruction"].strip():
             raise serializers.ValidationError("Only an instruction can be remembered")
         if data["nudge"] == "custom" and not data["instruction"].strip():

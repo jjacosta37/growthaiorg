@@ -1,5 +1,7 @@
 from django.db import models
 
+from apps.core.models import Project
+
 
 class AgentFeedback(models.Model):
     """One piece of feedback the user gave an agent about its drafts. Kept raw; the digest in
@@ -29,7 +31,7 @@ class AgentFeedback(models.Model):
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["project", "agent_type", "digested_at"])]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.agent_type} feedback #{self.pk} ({self.source})"
 
 
@@ -51,10 +53,15 @@ class AgentLearnings(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["project", "agent_type"], name="uniq_learnings_per_agent")]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.project} {self.agent_type} learnings"
 
     @classmethod
-    def for_project(cls, project, agent_type: str) -> "AgentLearnings":
+    def for_project(cls, project: Project, agent_type: str) -> "AgentLearnings":
+        """The project's learnings for one agent, created empty on first use.
+
+        Args:
+            agent_type: An `AgentType` value; the caller has already checked it against the registry.
+        """
         obj, _ = cls.objects.get_or_create(project=project, agent_type=agent_type)
         return obj

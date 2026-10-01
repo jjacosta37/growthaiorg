@@ -51,6 +51,30 @@ Complex features start with `/prd`: product questions, then a short PRD in `docs
 
 After a feature merges, `/feature-doc <feature>` records it in `docs/features/`: how it behaves, why it was built that way, and how it works in the code, checked against the code (`docs/features/README.md` has the template). When a later change alters a documented feature, update its doc in the same way rather than adding a new one.
 
+## Python code standards
+
+These apply to all new code and to every function or class a change modifies, in `backend/` outside `tests/` and `migrations/`. Code that isn't touched is left as it is: don't reformat a file you didn't otherwise need to change.
+
+- **Type hints:** annotate every parameter and the return type, `-> None` included. Leave `self` and `cls` unannotated. Use the modern forms the py313 target allows, such as `list[str]`, `dict[str, int]` and `X | None`, never `List` or `Optional`.
+  - Annotate DRF views too: `def post(self, request: Request, pk: int) -> Response`.
+  - Model and run types are fine as annotations (`Draft`, `AgentRun`, `RunReporter`). Use a `TYPE_CHECKING` import when a runtime import would be circular.
+  - Pydantic models and Django model fields are already typed by their declarations, so don't annotate them again.
+- **Docstrings:** Google style, written to inform rather than to fill a template.
+  - **Every class and every public function** (no leading underscore) gets one. The summary line says what it does; the next lines say *why*, or the contract a caller can't see from the signature, when there is one.
+  - Add **`Args:`** when the function has a parameter whose meaning isn't obvious from its name and type, and **`Returns:`** when the return value needs explaining. Don't restate the obvious, as in "project: The project."
+  - Add **`Raises:`** for every exception the caller is expected to handle (`RunConflict`, `DraftStateError`, `llm.LLMError`, `Http404` from a helper). An exception that just propagates as a 500 doesn't need listing.
+  - **A one-line docstring is enough** for small private helpers, and for framework overrides whose contract the framework defines: DRF `get`/`post`/`get_queryset`, serializer `validate_*` / `get_*`, `AppConfig.ready`, admin classes. A view's one-liner names the endpoint and what it does, e.g. `"""POST {rating?, text?}: feedback on a draft."""`.
+  - Celery tasks list their arguments under `Args:`, because those are ids and strings sent through the broker.
+  - Nested `Meta` classes, `TextChoices` enums and dunder methods such as `__str__` need no docstring.
+  - In `llm/schemas.py`, a class docstring becomes the `description` of the JSON schema the model sees, so write it as an instruction to the model.
+- **Logging:** follow "Logging and error reporting" below. In short:
+  - The module logger is `log = logging.getLogger(__name__)`. It's named `log`, not `logger`.
+  - Inside a pipeline, report through `RunReporter`, not the logger.
+  - Log ids and counts, never content.
+  - Exceptions are reported with `exc=` or logged with `exc_info=True`.
+  - DEBUG isn't used in shipped code.
+- **Style:** `ruff check` passes on every file you change (`backend/ruff.toml`, line length 120).
+
 ## Logging and error reporting
 
 Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.

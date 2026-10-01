@@ -10,6 +10,7 @@ import llm
 from apps.agents.external import record_external
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
+from apps.core.models import Project
 from apps.feedback.services import learning_variables, selection_learnings
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
@@ -17,6 +18,7 @@ from apps.inbox.nudges import nudge_instruction
 from apps.policy.service import policy_for
 from llm import batch as llm_batch
 from llm.models import LLMBatch
+from llm.schemas import RedditComment
 from providers.reddit import ApifyRedditSource, FakeRedditSource, RedditSearch
 
 from .config import RedditAgentConfig
@@ -100,6 +102,11 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig) -> list[
 
 
 def post_variables(post: RedditPost) -> dict:
+    """Prompt variables for scoring a post: the post, the author role and the selection learnings.
+
+    The batch and sync scoring paths both build their input here, so the learnings reach a
+    scheduled run exactly as they reach "Run now". Long bodies are cut at `BODY_CHAR_LIMIT`.
+    """
     body = post.body[:BODY_CHAR_LIMIT] + ("\n[…truncated]" if len(post.body) > BODY_CHAR_LIMIT else "")
     age_hours = None
     if post.posted_at:
@@ -205,18 +212,34 @@ def apply_batch_results(run, reporter, b: LLMBatch) -> list[RedditPost]:
 # --- Drafting ---------------------------------------------------------------------------
 
 
-def comment_variables(post: RedditPost, project, *, previous: str = "", instruction: str = "") -> dict:
+def comment_variables(post: RedditPost, project: Project, *, previous: str = "", instruction: str = "") -> dict:
+    """Prompt variables for drafting a reply: the post, the user's custom instructions, the
+    writing learnings and any feedback the digest hasn't folded in yet.
+
+    Args:
+        previous: The current draft body, when revising one.
+        instruction: The revision direction (preset nudge text plus the user's instruction).
+    """
     return {**post_variables(post), **learning_variables(project, AgentType.REDDIT),
             "project_name": project.name, "reason": post.relevance_reason,
             "guidance": load_config(project).guidance.strip(),
             "previous_draft": previous, "instruction": instruction}
 
 
-def comment_content(parsed) -> dict:
+def comment_content(parsed: RedditComment) -> dict:
+    """The draft content to store from a comment response (`RedditCommentContent` shape)."""
     return {"body": parsed.body, "poster_read": parsed.poster_read.strip()}
 
 
-def draft_replies(run, reporter, cfg: RedditAgentConfig, posts: list[RedditPost]) -> None:
+def draft_replies(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, posts: list[RedditPost]) -> None:
+    """Draft a reply for every scored post at or above the threshold that's worth one.
+
+    Reports the candidates it considered, then one step per draft. A post that fails to draft is
+    reported with its exception and skipped; the rest still get drafts.
+
+    Args:
+        posts: This run's posts, scored or not; unscored and already-drafted posts are skipped.
+    """
     candidates = [
         p for p in posts
         if p.score_status == RedditPost.ScoreStatus.SCORED and p.reply_worthwhile
@@ -279,7 +302,23 @@ def batch_expired(run: AgentRun) -> bool:
     return timezone.now() - b.submitted_at > timedelta(hours=settings.LLM_BATCH_MAX_AGE_HOURS)
 
 
-def regenerate(draft: Draft, nudge: str, instruction: str, run) -> DraftVersion:
+def regenerate(draft: Draft, nudge: str, instruction: str, run: AgentRun) -> DraftVersion:
+    """Write a new AI version of a Reddit draft, steered by a nudge and/or an instruction.
+
+    Uses the same prompt variables as a first draft, so the custom instructions and learnings
+    apply to regenerations too. The new version is linted for compliance.
+
+    Args:
+        nudge: A key of `NUDGES`, or "".
+        instruction: The user's own direction, or "".
+        run: The `regenerate_draft` run the LLM call is billed to.
+
+    Returns:
+        The new current version.
+
+    Raises:
+        ValueError: The draft has no source post to reply to.
+    """
     post = draft.source_reddit_post
     if post is None:
         raise ValueError("This draft has no source post")

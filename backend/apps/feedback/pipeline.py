@@ -4,6 +4,7 @@ from django.utils import timezone
 
 import llm
 from apps.agents import registry
+from apps.agents.models import AgentRun
 from apps.agents.runs import RunReporter
 from apps.policy.service import policy_for
 
@@ -15,9 +16,12 @@ EXCERPT_CHARS = 300
 
 
 def entry_variables(entry: AgentFeedback) -> dict:
-    """An entry as the digest sees it: the feedback plus the post title and a short excerpt of the
-    draft, so a comment like "too long" can be generalized. Both are third-party or model text,
-    so they're escaped and the prompt treats them as data. They go to the model only."""
+    """One feedback entry as the digest prompt sees it.
+
+    Adds the post title and a short excerpt of the draft to the feedback, so a comment like "too
+    long" can be generalized. Both are third-party or model text, so they're escaped and the
+    prompt treats them as data. They go to the model only, never to logs or `RunEvent.data`.
+    """
     content = entry.draft_version.content if entry.draft_version_id and entry.draft_version else {}
     body = content.get("body") or " ".join(content.get("posts", [])) or content.get("body_md", "")
     excerpt = body[:EXCERPT_CHARS] + ("…" if len(body) > EXCERPT_CHARS else "")
@@ -28,7 +32,19 @@ def entry_variables(entry: AgentFeedback) -> dict:
     }
 
 
-def digest_feedback(run, reporter: RunReporter) -> None:
+def digest_feedback(run: AgentRun, reporter: RunReporter) -> None:
+    """Fold feedback into the agent's learnings: the body of a `digest_feedback` run.
+
+    A normal run folds the pending entries (oldest first, at most `DIGEST_BATCH_LIMIT`) into the
+    current learnings, keeping a human's wording when the learnings were hand-edited. A rebuild
+    (`run.params["rebuild"]`) re-learns from the newest entries alone and replaces the learnings;
+    with no feedback left it clears them. Entries it used are stamped `digested_at`.
+
+    Args:
+        run: The digest run. `params` carries `agent_type` and `rebuild`; the project is
+            `run.project`, and nothing outside it is read.
+        reporter: The run's reporter; progress and the outcome are reported through it.
+    """
     project, agent_type = run.project, run.params["agent_type"]
     rebuild = bool(run.params.get("rebuild"))
     learnings = AgentLearnings.for_project(project, agent_type)

@@ -64,6 +64,8 @@ class RelevanceScore(BaseModel):
 
 @register
 class RedditComment(BaseModel):
+    """A drafted Reddit comment, with a one-line read of the poster written before it."""
+
     # First, so the model reads the poster before it writes the reply.
     poster_read: str = Field(description="One line: who the poster seems to be (expertise, role, situation), "
                                          "based only on what they wrote, or 'no cues'.")
@@ -76,6 +78,8 @@ class RedditComment(BaseModel):
 
 @register
 class FeedbackDigest(BaseModel):
+    """The updated learnings: lessons distilled from the user's feedback on drafts."""
+
     writing: str = Field(description="Markdown bullets: how to write drafts, from the feedback. Empty if none.")
     selection: str = Field(description="Markdown bullets: which items to draft for or skip. Empty if none.")
 

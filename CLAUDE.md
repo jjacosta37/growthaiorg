@@ -39,6 +39,16 @@ Production has no debugger attached: the log stream, the `AgentRun` row and the 
 - **Tests never reach Sentry** (no DSN in `config.settings.test`). Assert on `RunEvent` rows and `run.stats` for domain failures, and use `caplog` for log level. See `backend/tests/test_observability.py`.
 - **The frontend reports nothing** (decided, not overlooked). `ErrorBoundary` in `frontend/src/components/feedback.tsx` stops a render throw from blanking the app and writes to the viewer's console; nothing leaves the browser. API failures are still covered, because the 500 is reported server-side. Client-side JS errors — a throw in an event handler, an unhandled rejection — leave no trace. Closing that means `@sentry/react` plus source-map upload, or the stack traces are minified and useless.
 
+## Security
+
+`docs/security-patterns.md` defines what secure means for Luka. It covers the tenant boundary, public views, SSRF, model-output effects and the severity rubric, and it holds the register of known concerns. `tests/test_security_patterns.py` enforces its mechanical rules.
+
+- **Run `/security-scan` before every push and every PR.** Fix every CRITICAL and HIGH finding in the same PR, commit, and let the skill mark HEAD. Then paste its `## Security scan` section into the PR description.
+  - A `PreToolUse` hook (`.claude/hooks/security-gate.sh`) blocks `git push` and PR creation until HEAD is marked. Any new commit needs a new scan.
+  - Don't work around the gate. If a CRITICAL or HIGH finding can't be fixed within the PR, stop and ask.
+- **Every new endpoint gets a case in `tests/test_tenancy.py`.** Scoping through `current_project(request)` is the only thing that separates tenants.
+- **Adding a trust boundary means updating the patterns doc in the same PR.** That covers a public view, an outbound fetch, an LLM tool, a new effect of model output, a new call multiplier, or a new third party that receives content. The same goes for fixing an item from the known-concerns register: remove it from the register.
+
 ## What a run must make visible
 
 A pipeline inherits three things for free: `running()` gives it a LangSmith span, the status lifecycle, Sentry tags and a `RunReporter`; `llm.complete()` / `llm.batch.*` trace every call and write the `LLMCall` row; and anything sent through the reporter becomes a `RunEvent`, a log line and a breadcrumb. **Nothing below is automatic** — a new agent gets none of it unless its author opts in, and the failure mode is a run that looks fine and explains nothing.

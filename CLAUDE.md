@@ -19,6 +19,16 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 ## Claude Code on the web (sandbox)
 `.claude/hooks/session-start.sh` prepares a cloud session: a Python 3.13 venv at `.venv` (on `PATH`), Postgres on `localhost:5433` (role/db `luka`, migrated and bootstrapped with `admin`/`admin`), Redis on 6379, `frontend/node_modules`, and `REDDIT_SOURCE=fake`. No Docker. Checks: `pytest` and `ruff check .` in `backend/`; `npm run lint` and `npm test` in `frontend/`. Run the app with `python manage.py runserver` (`config.settings.dev`) and `npm run dev`. Real LLM or Apify calls need keys in the environment's secrets.
 
+## Git workflow
+
+Work happens both in local sessions and in Claude Code on the web, which clones from GitHub. Neither can see the other's unpushed commits, so `main` only ever changes through merged PRs.
+
+- **Never commit to `main`.** Start from an up-to-date main and branch: `git switch main && git pull`, then `git switch -c <type>/<short-name>` (`feat/`, `fix/`, `chore/`, `docs/`). Commit there, push, open a PR, merge. Local `main` then only fast-forwards and never diverges.
+- **Sync at every handoff.** Push before moving work to a web session. Pull `main` (and rebase any open branch with `git rebase origin/main`) before resuming locally. At the start of a local session, `git fetch` and check whether the branch is behind before writing code.
+- **Resolve conflicts on the branch, never on `main`.** Rebase the branch onto `origin/main`, fix the conflict there, and force-push the branch with `--force-with-lease`. Never force-push `main`.
+- **Keep branches short-lived**, one feature each, merged soon. `CLAUDE.md` and `.claude/settings.json` change in most sessions and are where conflicts land. Keep edits to them small, and when both sides added entries (hooks, rules), keep both.
+- Recommended git config, once per machine: `git config --global pull.rebase true` and `git config --global rebase.autoStash true`.
+
 ## Logging and error reporting
 
 Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.
@@ -38,6 +48,16 @@ Production has no debugger attached: the log stream, the `AgentRun` row and the 
 - **Spend and usage go to the database, not the log.** `LLMCall` and `ExternalUsage` are the record; `apps/stats/` reads them. A log line about cost is for debugging only, never the source of truth.
 - **Tests never reach Sentry** (no DSN in `config.settings.test`). Assert on `RunEvent` rows and `run.stats` for domain failures, and use `caplog` for log level. See `backend/tests/test_observability.py`.
 - **The frontend reports nothing** (decided, not overlooked). `ErrorBoundary` in `frontend/src/components/feedback.tsx` stops a render throw from blanking the app and writes to the viewer's console; nothing leaves the browser. API failures are still covered, because the 500 is reported server-side. Client-side JS errors — a throw in an event handler, an unhandled rejection — leave no trace. Closing that means `@sentry/react` plus source-map upload, or the stack traces are minified and useless.
+
+## Security
+
+`docs/security-patterns.md` defines what secure means for Luka. It covers the tenant boundary, public views, SSRF, model-output effects and the severity rubric, and it holds the register of known concerns. `tests/test_security_patterns.py` enforces its mechanical rules.
+
+- **Run `/security-scan` before every push and every PR.** Fix every CRITICAL and HIGH finding in the same PR, commit, and let the skill mark HEAD. Then paste its `## Security scan` section into the PR description.
+  - A `PreToolUse` hook (`.claude/hooks/security-gate.sh`) blocks `git push` and PR creation until HEAD is marked. Any new commit needs a new scan.
+  - Don't work around the gate. If a CRITICAL or HIGH finding can't be fixed within the PR, stop and ask.
+- **Every new endpoint gets a case in `tests/test_tenancy.py`.** Scoping through `current_project(request)` is the only thing that separates tenants.
+- **Adding a trust boundary means updating the patterns doc in the same PR.** That covers a public view, an outbound fetch, an LLM tool, a new effect of model output, a new call multiplier, or a new third party that receives content. The same goes for fixing an item from the known-concerns register: remove it from the register.
 
 ## What a run must make visible
 

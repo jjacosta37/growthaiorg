@@ -29,6 +29,14 @@ Work happens both in local sessions and in Claude Code on the web, which clones 
 - **Keep branches short-lived**, one feature each, merged soon. `CLAUDE.md` and `.claude/settings.json` change in most sessions and are where conflicts land. Keep edits to them small, and when both sides added entries (hooks, rules), keep both.
 - Recommended git config, once per machine: `git config --global pull.rebase true` and `git config --global rebase.autoStash true`.
 
+## Feature PRDs
+
+Complex features start with `/prd`: product questions, then a short PRD in `docs/prds/` whose acceptance criteria the user explicitly accepts before any implementation planning (`docs/prds/README.md` has the template and lifecycle).
+
+- **A plan built from a PRD maps every AC** to the steps that deliver it and to how it will be verified, and adds nothing the PRD's Out list excludes.
+- **ACs are a contract.** If implementation shows one is wrong or impossible, stop and ask. An approved change is logged under "Changes after agreement", never made silently.
+- Set the status to `building` when implementation starts and to `shipped` when the PR merges. The PR description lists every AC with ✅ and how it was checked.
+
 ## Logging and error reporting
 
 Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.

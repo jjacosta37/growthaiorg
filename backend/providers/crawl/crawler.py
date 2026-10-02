@@ -98,7 +98,7 @@ class Crawler:
                         url = location
                         continue
                     return self._read_capped(resp, url)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, httpx.InvalidURL) as exc:  # InvalidURL: a malformed link host
                 reason = "blocked address" if isinstance(exc.__cause__, BlockedAddress) else "unreachable"
                 log.info("crawl: GET %s failed (%s): %s", url, reason, type(exc).__name__)
                 return None, reason
@@ -203,15 +203,16 @@ class Crawler:
     def _check_start_host(self, host: str, port: int) -> None:
         """Fail the crawl up front, with a clear message, when the site isn't on the public internet.
 
+        One message for "doesn't resolve" and "resolves privately": telling them apart would let
+        a tenant probe which hostnames exist on the operator's network.
+
         Raises:
             ValueError: the host doesn't resolve, or resolves to a private or local address.
         """
         try:
             resolve_public(host, port, self.resolve)
-        except BlockedAddress as exc:
-            if isinstance(exc.__cause__, OSError):
-                raise ValueError(f"Couldn't find {host}. Check the website address.") from None
-            raise ValueError(f"{host} isn't a public website address, so Luka can't crawl it.") from None
+        except BlockedAddress:
+            raise ValueError(f"Couldn't reach {host} as a public website. Check the address.") from None
 
     def _render_thin_pages(self, result: CrawlResult, renderer: PageRenderer, progress: ProgressFn) -> None:
         # Same-site by construction; checked again because these URLs are fetched by a third party.

@@ -269,7 +269,7 @@ def test_blocked_connections_are_reported_as_blocked():
 def test_private_start_address_fails_before_any_request(url):
     crawler, requested = make_crawler({})
 
-    with pytest.raises(ValueError, match="isn't a public website address"):
+    with pytest.raises(ValueError, match="as a public website"):
         crawler.crawl(url, max_pages=10)
     assert requested == []
 
@@ -277,19 +277,39 @@ def test_private_start_address_fails_before_any_request(url):
 def test_public_name_resolving_privately_fails_before_any_request():
     crawler, requested = make_crawler({}, resolve=lambda host, port, **kw: [(2, 1, 6, "", ("192.168.1.20", port))])
 
-    with pytest.raises(ValueError, match="isn't a public website address"):
+    with pytest.raises(ValueError, match="as a public website"):
         crawler.crawl("https://intranet.acme.example", max_pages=10)
     assert requested == []
 
 
-def test_unknown_host_says_so():
+def test_unknown_and_private_hosts_fail_with_the_same_message():
+    """Different messages would let a tenant probe which names exist on the operator's LAN."""
     def nxdomain(host, port, **kwargs):
         raise OSError("Name or service not known")
 
-    crawler, _ = make_crawler({}, resolve=nxdomain)
+    def private(host, port, **kwargs):
+        return [(2, 1, 6, "", ("192.168.1.20", port))]
 
-    with pytest.raises(ValueError, match="Couldn't find typo.example"):
-        crawler.crawl("https://typo.example", max_pages=10)
+    messages = []
+    for resolve in (nxdomain, private):
+        crawler, _ = make_crawler({}, resolve=resolve)
+        with pytest.raises(ValueError) as exc_info:
+            crawler.crawl("https://nas.example", max_pages=10)
+        messages.append(str(exc_info.value))
+    assert messages[0] == messages[1]
+
+
+def test_malformed_link_host_skips_the_link_without_aborting_the_crawl():
+    home = page("Home", '<a href="http://0177.0.0.1/x">bad</a> <a href="/about">About</a>')
+    routes = {
+        "https://acme.example/": (200, HTML, home),
+        "https://acme.example/about": (200, HTML, page("About")),
+    }
+    crawler, _ = make_crawler(routes)
+
+    result = crawler.crawl("https://acme.example/", max_pages=5)
+
+    assert [p.title for p in result.pages] == ["Home", "About"]
 
 
 def test_renderer_only_gets_same_site_urls():

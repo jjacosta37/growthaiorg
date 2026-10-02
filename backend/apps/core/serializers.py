@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from .models import Project, WaitlistSignup
 from .selection import SESSION_KEY
+from .validators import public_website_url
 
 
 class LoginSerializer(serializers.Serializer):
@@ -28,6 +29,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         model = Project
         fields = ["id", "name", "website_url", "product_summary", "competitors", "onboarded_at"]
         read_only_fields = ["id", "onboarded_at"]
+        extra_kwargs = {"website_url": {"validators": [public_website_url]}}
 
 
 class ProjectListSerializer(serializers.ModelSerializer):
@@ -39,7 +41,7 @@ class ProjectListSerializer(serializers.ModelSerializer):
         model = Project
         fields = ["id", "name", "website_url", "onboarded_at", "is_current", "created_at"]
         read_only_fields = ["id", "onboarded_at", "is_current", "created_at"]
-        extra_kwargs = {"name": {"required": False}}
+        extra_kwargs = {"name": {"required": False}, "website_url": {"validators": [public_website_url]}}
 
     def get_is_current(self, obj) -> bool:
         request = self.context.get("request")

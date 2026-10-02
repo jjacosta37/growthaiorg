@@ -96,3 +96,11 @@ def test_pages_endpoint(client, project):
     CrawledPage.objects.create(project=project, url="https://acme.example/a", title="A", content_text="abc",
                                content_hash="h")
     assert client.get("/api/context/pages/").json()[0]["chars"] == 3
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:8000", "http://192.168.1.1/", "http://localhost", "http://nas.local"])
+def test_start_onboarding_rejects_local_addresses(client, project, url):
+    resp = client.post("/api/onboarding/start/", {"website_url": url})
+    assert resp.status_code == 400
+    assert "website_url" in resp.json()
+    assert not AgentRun.objects.filter(project=project).exists()

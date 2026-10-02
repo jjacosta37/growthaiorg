@@ -22,7 +22,7 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - **`render.yaml` and the Render notes in the README are legacy.** Nothing is deployed from them. Don't extend them, and don't design anything around Render features such as rewrites, `RENDER_*` env vars or managed Postgres.
 - **What hosting at home means for code:**
   - The server's network is a home LAN. Anything the worker can be made to fetch can reach the router, other devices and services on the Mac itself.
-  - Every outbound request leaves from the operator's residential IP. A request to a host a tenant chooses reveals that IP, and the traffic is attributed to the operator.
+  - Every outbound request leaves from the operator's residential IP. A request to a host a tenant chooses reveals that IP, and the traffic is attributed to the operator. This is a known issue that scans flag as MEDIUM. Fixing it isn't required for now; it will be fixed later with an egress proxy or relay (`docs/security-patterns.md` §6 and §14 "Accepted risks"). The SSRF rules are not relaxed.
   - `docs/security-patterns.md` §1 and §6 hold the rules.
 - **Assume the login page is on the internet and any account may be hostile.** A public login, possibly with signup, is planned, perhaps while Luka is still on the mini. "Accounts are created by an admin" is never a reason to accept a risk or lower a finding's severity.
 

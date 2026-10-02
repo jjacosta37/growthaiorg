@@ -19,7 +19,7 @@ Hosting at home changes what a bug costs:
 | Property of the host | Consequence for security |
 |---|---|
 | The server's "internal network" is a **home LAN** | SSRF reaches the router's admin page, NAS, printers and cameras, the operator's other computers, and services on the Mac itself. Docker Desktop containers reach the Mac through `host.docker.internal` and the LAN through NAT. None of those were built to face the internet. |
-| Every outbound request leaves from the operator's **residential IP** | A server-side request to a host a tenant chooses shows that IP, and with it the operator's approximate location and ISP. It also attributes the traffic to the operator: abuse complaints go to their ISP, and blocklists flag their home connection. |
+| Every outbound request leaves from the operator's **residential IP** | A server-side request to a host a tenant chooses shows that IP, and with it the operator's approximate location and ISP. It also attributes the traffic to the operator: abuse complaints go to their ISP, and blocklists flag their home connection. **Accepted for now** (§6, §14). |
 | **One machine**, the operator's own | Compromising the app gives a foothold inside a home network, not a disposable cloud VM. Postgres, Redis and the Docker socket share the host. |
 
 ### Threat model
@@ -36,7 +36,7 @@ Hosting at home changes what a bug costs:
 | Boundary | Untrusted side | Guarded by |
 |---|---|---|
 | Browser → DRF API | Every request, including logged-in ones (another tenant is also a logged-in user) | Session auth + CSRF, `IsAuthenticated`, `current_project()` scoping (§2–3) |
-| Worker → internet / home LAN | Any URL a user or a crawled page supplies | `providers/crawl/` URL and address rules, and an egress proxy for tenant-chosen hosts (§6) |
+| Worker → internet / home LAN | Any URL a user or a crawled page supplies | `providers/crawl/` URL and address rules (§6). Egress from the home IP is an accepted risk for now. |
 | Text → LLM | Crawled pages, Reddit posts, user nudges and guidance, context docs derived from crawls | Prompt structure and a fixed allowlist of effects model output can have (§7) |
 | Model output → database, config, spend | Everything a model returns | Pydantic schemas, a fixed set of effects, nothing published automatically (§7) |
 | API → browser | Stored model output, crawled URLs, Reddit URLs | React escaping, http(s)-only URLs (§8) |
@@ -168,14 +168,16 @@ Luka's worker fetches URLs that come from users, such as `website_url`, and from
 - **SSRF:** it can be pointed inward, at the LAN.
 - **Egress identity:** when it goes outward, it shows who and where the operator is.
 
-### Egress identity: tenant-chosen hosts never see the home IP
-- **Fixed provider APIs may be called directly** from the mini. That means Anthropic, the Apify API, Sentry and LangSmith. Their hosts are fixed in code, and they already know who we are.
-- **Any request to a host a tenant or a crawled page chooses must go out through an egress proxy, not the home connection.** That includes the website crawl, its `robots.txt`, sitemaps and redirects, and any future link preview, favicon or image fetch, URL check or webhook. Alternatively, the fetch can be delegated to a provider that runs it on its own network, as `ApifyRenderer` does.
-  - The proxy is configured by env, for example `CRAWL_PROXY_URL` passed to the httpx client. The proxy provider counts as a third party (§10).
-- **Production fails closed.** If the proxy isn't configured, tenant-directed fetches refuse to run rather than falling back to the home IP. Dev may go direct.
-- **The proxy doesn't replace the address checks below.** They still apply when the proxy is missing, as in dev, and they stop the crawl from reporting an internal map back to the tenant.
-- **Don't add identifying details to tenant-directed requests.** No operator name, email, domain or contact URL in the user agent or headers.
-- **Severity:** a new code path that makes the server request a tenant-chosen host directly is **HIGH**. It reveals the operator's home IP and location to any account holder in seconds, and puts the operator's connection behind whatever traffic the tenant directs.
+### Egress identity: an accepted risk, for now
+**This is a real issue, and we've decided to live with it for now** (operator decision, 2026-10-02). The crawler fetches tenant-chosen sites directly from the mini. Any account holder can therefore learn the operator's home IP, and from it their approximate location and ISP, by crawling a site they control and reading its access logs. That traffic is also attributed to the operator's home connection. An egress proxy or relay would fix it, but it isn't worth the extra moving parts yet. The risk is listed under **Accepted risks** in §14, and it will be worked on later.
+
+Until then:
+- **A request from the home IP to a tenant-chosen host is still flagged, as MEDIUM, but fixing it is not required for now.** That covers the crawl and any future link preview, image fetch, URL check or webhook. Scans list each such fetch path in the PR's deferred Medium findings, so the exposure stays visible. Because it's Medium, it doesn't block the gate. Every such fetch must still follow the SSRF rules below, which are **not** relaxed.
+- **Fixed provider APIs are called directly from the mini:** Anthropic, the Apify API, Sentry and LangSmith. Their hosts are fixed in code.
+- **Don't add identifying details to tenant-directed requests.** No operator name, email, domain or contact URL in the user agent or headers. The IP is accepted; giving away more than the IP is not.
+- **Don't build anything that relies on the home IP being secret.** A tunnel keeps it out of DNS, but a tenant can still learn it through the crawler.
+- **Keep the eventual fix cheap.** Tenant-directed fetches go through `providers/crawl/` and its httpx client. When the egress fix lands, it can then be a single change, for example a proxy or relay URL from env that production requires.
+- **Revisit when** signup opens to the public at scale, abuse or blocklisting of the home IP shows up, or Luka moves off the mini.
 
 ### SSRF: nothing tenant-directed may reach the home network
 - **Only `backend/providers/` makes outbound HTTP.** That means `httpx`, `urllib.request`, Apify clients and any future provider. The one exception is the Anthropic SDK in `backend/llm/`. Apps and pipelines call the provider interfaces. `test_security_patterns.py` enforces this.
@@ -288,7 +290,7 @@ These are banned in application code (not tests or migrations). `test_security_p
   - **Apify:** same-site URLs and Reddit search terms
   - **LangSmith:** prompt inputs and outputs, only when `LANGSMITH_TRACING` is on
   - **Sentry:** identifiers only
-  - **The egress proxy (§6), once added:** the URLs the crawler fetches and the responses that come back
+  - **An egress proxy or relay, if one is added later (§6):** the URLs the crawler fetches and the responses that come back
 
   Sending content anywhere new is a new trust boundary, so update this list.
 - **Anti-enumeration:** the waitlist answers new and repeat emails the same way. `current_project` treats "not yours" like "doesn't exist". Keep that behaviour on new public or cross-object endpoints.
@@ -322,7 +324,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - reachable only on the internal Docker network
 
   The dev `docker-compose.yml` publishes ports 8000, 5173 and 5433; it's for a developer's machine, never production.
-- **Internet exposure goes through one deliberate path** chosen in `mini-infra`, such as a tunnel or one forwarded port to Caddy. Prefer a tunnel: it doesn't publish the home IP in DNS. Once the IP is hidden at the front, the crawler must not reveal it at the back (§6).
+- **Internet exposure goes through one deliberate path** chosen in `mini-infra`, such as a tunnel or one forwarded port to Caddy. Prefer a tunnel: it doesn't publish the home IP in DNS. A tenant can still learn the IP through the crawler (an accepted risk, §6), so the tunnel limits exposure; it doesn't make the IP secret.
 - **TLS ends at the edge** (the tunnel or Caddy). `SECURE_PROXY_SSL_HEADER` trusts `X-Forwarded-Proto` only because the host proxy sets it. The proxy must overwrite, not pass through, a client-supplied `X-Forwarded-For` / `X-Forwarded-Proto`.
 - **The Docker socket is never mounted** into an app container.
 - **Containers stay on their own network.** None runs with `network_mode: host`, and none is privileged.
@@ -350,8 +352,8 @@ A PR must not:
 | Severity | Meaning | Luka examples |
 |---|---|---|
 | **CRITICAL** | Direct compromise of another tenant, the operator, the server or the home network | Unscoped lookup exposing another project's rows; a non-public view reachable anonymously; a committed secret; RCE (pickle, `yaml.load`, template from user text, `shell=True` with data); SSRF with a readable response (LAN pages, the Mac's services); Postgres or Redis published beyond the host; the Docker socket mounted in a container; CORS wildcard with credentials; `DEBUG=True` in prod |
-| **HIGH** | Exploitable with some precondition, or serious data exposure | Stored XSS (raw HTML in markdown, a `javascript:` URL in `href`/`window.open`); blind SSRF or a LAN port/status oracle; a server request to a tenant-chosen host that leaves from the home IP (§6); model output causing an effect outside the §7 allowlist; tracebacks or secrets in API responses, `RunEvent`s or logs; a Celery task acting outside `run.project`; unbounded tenant-triggered spend; `csrf_exempt` on an authenticated write |
-| **MEDIUM** | Needs unusual conditions, or weakens a defence | No throttle on login; missing security headers or CSP; a bad query param causing a 500; content sent to a new third party without an update here; a generous but bounded spend limit |
+| **HIGH** | Exploitable with some precondition, or serious data exposure | Stored XSS (raw HTML in markdown, a `javascript:` URL in `href`/`window.open`); blind SSRF or a LAN port/status oracle; model output causing an effect outside the §7 allowlist; tracebacks or secrets in API responses, `RunEvent`s or logs; a Celery task acting outside `run.project`; unbounded tenant-triggered spend; `csrf_exempt` on an authenticated write |
+| **MEDIUM** | Needs unusual conditions, or weakens a defence | No throttle on login; missing security headers or CSP; a bad query param causing a 500; content sent to a new third party without an update here; a generous but bounded spend limit; a server request to a tenant-chosen host from the home IP (accepted risk, §6) |
 | **LOW** | Hardening, defence in depth | Insecure defaults outside prod; verbose non-secret log lines |
 
 **Grade with the §1 threat model.** Any account may be hostile, and the operator's home network sits behind the server. "Only invited users can do this" never lowers a severity.
@@ -377,13 +379,12 @@ These are issues already in `main`. A branch scan does not report them again, **
      - Off-site redirect targets are also sent to Apify (`crawler.py:144`).
 
 ### High
-1. **Tenant-directed fetches leave from the home IP** (`providers/crawl/crawler.py`). The crawler fetches the tenant's site directly from the mini, with a distinctive `LukaBot/0.1` user agent. Any account holder can read the operator's home IP, and so their approximate location and ISP, from their own access logs. The crawl traffic is also attributed to the operator's home connection. The fix is the egress proxy in §6, failing closed in production.
-2. **Unbounded Reddit/Apify spend** (`apps/reddit/config.py:7-8`).
+1. **Unbounded Reddit/Apify spend** (`apps/reddit/config.py:7-8`).
    - `subreddits` and `keywords` have no count, length or format limit.
    - Apify start URLs = subreddits × keyword queries, with at least 5 results per URL (`providers/reddit/apify.py:109`), and nothing caps total items or charge.
    - Each run is limited only by the 15-minute actor timeout, and runs repeat through run-now or cron (Medium 4).
-3. **`RedditPost.url` scheme never validated.** It comes from Apify, is stored with `bulk_create` (which skips validators), and is rendered as `href` and returned as `open_url` for `window.open`.
-4. **Internal error text reaches the client:**
+2. **`RedditPost.url` scheme never validated.** It comes from Apify, is stored with `bulk_create` (which skips validators), and is rendered as `href` and returned as `open_url` for `window.open`.
+3. **Internal error text reaches the client:**
    - `agents/runs.py` stores `traceback.format_exc()` in `AgentRun.error`, which `AgentRunSerializer` and `agent_summary.last_error` expose.
    - The same goes for the `"Failed: {exc}"` `RunEvent` (`runs.py:137`).
    - It also goes for `score_error` in the skipped-posts API (`agents/api.py:138`).
@@ -421,7 +422,15 @@ These are issues already in `main`. A branch scan does not report them again, **
 1. The base `SECRET_KEY` default is `dev-insecure-change-me`. Prod requires a real one.
 2. With LangSmith on, full prompt variables (crawled text, drafts) go to LangSmith.
 3. The number of X items and blog topics saved follows the model's output, not `posts_per_run` / `topics_per_run` (`apps/xagent/pipeline.py`, `apps/content/pipeline.py`). This is bounded by `max_tokens`.
-4. `ApifyRedditSource` doesn't URL-encode the subreddit in the search URL. The host is fixed. High 2's format check would close this.
+4. `ApifyRedditSource` doesn't URL-encode the subreddit in the search URL. The host is fixed. High 1's format check would close this.
+
+### Accepted risks
+These are real issues that the operator has decided to live with for now. Scans still **flag them, at the severity given here, but fixing them is not required**, and the gate doesn't block on them. A scan reports an accepted risk when a PR touches or adds to it, and lists it under the deferred findings. The risks stay listed until they're fixed. Making one meaningfully worse is a separate, normal finding: for example, adding operator-identifying headers.
+
+1. **MEDIUM: the home IP is visible to tenants** (accepted 2026-10-02; §6). The crawler fetches tenant-chosen sites directly from the mini, with a `LukaBot/0.1` user agent. Any account holder can learn the operator's home IP, approximate location and ISP from their own server's logs. The crawl traffic is also attributed to the home connection.
+   - **Why accepted:** an egress proxy or Cloudflare Worker relay isn't worth the added complexity yet, and the impact is disclosure of the IP, not access.
+   - **Planned fix:** route tenant-directed fetches through an egress proxy or relay, required in production.
+   - **Revisit when:** signup opens publicly at scale, the home IP gets abuse reports or blocklisted, or Luka moves off the mini.
 
 ---
 
@@ -441,7 +450,8 @@ These are issues already in `main`. A branch scan does not report them again, **
 | **Input** | Body read without a serializer; `int()` on a query param without a guard; untyped `JSONField` | MEDIUM |
 | **SSRF** | Outbound HTTP outside `providers/` / `llm/` | HIGH |
 | **SSRF** | Fetching a URL without scheme, same-site and resolved private-address checks (on every redirect hop) | HIGH (CRITICAL if the response is readable) |
-| **Egress** | Server request to a tenant- or page-chosen host that doesn't go through the egress proxy, or falls back to the home IP when the proxy is missing | HIGH |
+| **Egress** | Server request to a tenant- or page-chosen host from the home IP (accepted risk: flag it, fixing not required for now, §6) | MEDIUM |
+| **Egress** | Tenant-directed fetch outside `providers/crawl/`'s client, so the eventual egress fix wouldn't cover it (§6) | MEDIUM |
 | **Egress** | Operator-identifying details (name, email, domain) in the user agent or headers of tenant-directed requests | MEDIUM |
 | **Host** | Production compose or image publishes Postgres, Redis, Django or Celery ports; mounts the Docker socket; uses host networking or privileged mode | CRITICAL |
 | **Host** | Internet exposure that bypasses the host proxy, or the proxy passing through client `X-Forwarded-*` headers | HIGH |

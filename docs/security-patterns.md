@@ -6,12 +6,37 @@ Keep this document true. When a PR adds a legitimate new trust boundary, update 
 
 ---
 
-## 1. Trust boundaries
+## 1. Where Luka runs, who attacks it, and the trust boundaries
+
+### Deployment
+Production is a **Mac mini on the operator's private home network**:
+- Docker Compose runs web, worker, beat, Postgres and Redis on that one machine, behind Caddy.
+- The host setup lives in the separate `mini-infra` repo; this repo builds the images.
+- `render.yaml` is legacy and not deployed.
+
+Hosting at home changes what a bug costs:
+
+| Property of the host | Consequence for security |
+|---|---|
+| The server's "internal network" is a **home LAN** | SSRF reaches the router's admin page, NAS, printers and cameras, the operator's other computers, and services on the Mac itself. Docker Desktop containers reach the Mac through `host.docker.internal` and the LAN through NAT. None of those were built to face the internet. |
+| Every outbound request leaves from the operator's **residential IP** | A server-side request to a host a tenant chooses shows that IP, and with it the operator's approximate location and ISP. It also attributes the traffic to the operator: abuse complaints go to their ISP, and blocklists flag their home connection. |
+| **One machine**, the operator's own | Compromising the app gives a foothold inside a home network, not a disposable cloud VM. Postgres, Redis and the Docker socket share the host. |
+
+### Threat model
+- **Assume the login page is on the internet and that anyone can get an account.** A public login, possibly with signup, is planned, perhaps while Luka is still on the mini.
+- "Accounts are created by an admin" is true today, but it is **never** a mitigation. Don't lower a finding's severity because of it.
+- The attacker to plan for is a normal, logged-in tenant. That tenant controls:
+  - every field the API accepts
+  - the website being crawled, and so every page, redirect, `robots.txt` and sitemap the crawler sees
+  - the text that steers the models
+- An anonymous internet user reaches only the §2 public views and whatever the host exposes (§12).
+
+### Trust boundaries
 
 | Boundary | Untrusted side | Guarded by |
 |---|---|---|
 | Browser → DRF API | Every request, including logged-in ones (another tenant is also a logged-in user) | Session auth + CSRF, `IsAuthenticated`, `current_project()` scoping (§2–3) |
-| Worker → internet | Any URL a user or a crawled page supplies | `providers/crawl/` URL rules (§6) |
+| Worker → internet / home LAN | Any URL a user or a crawled page supplies | `providers/crawl/` URL and address rules, and an egress proxy for tenant-chosen hosts (§6) |
 | Text → LLM | Crawled pages, Reddit posts, user nudges and guidance, context docs derived from crawls | Prompt structure and a fixed allowlist of effects model output can have (§7) |
 | Model output → database, config, spend | Everything a model returns | Pydantic schemas, a fixed set of effects, nothing published automatically (§7) |
 | API → browser | Stored model output, crawled URLs, Reddit URLs | React escaping, http(s)-only URLs (§8) |
@@ -30,7 +55,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
 }
 ```
-Views inherit these. There is no public signup: an admin creates accounts in Django admin or with `manage.py bootstrap`.
+Views inherit these. Today there is no public signup: an admin creates accounts in Django admin or with `manage.py bootstrap`. **Don't rely on that.** Rate every finding as if anyone can get an account (§1).
 
 **Public views: this is the complete list.** Anything not listed here is a finding. Each entry is also in `PUBLIC_VIEWS` in `test_security_patterns.py`.
 
@@ -38,7 +63,7 @@ Views inherit these. There is no public signup: an admin creates accounts in Dja
 |---|---|---|---|
 | `apps.core.views.CsrfView` | `AllowAny` | no | Issues the CSRF cookie before login |
 | `apps.core.views.LoginView` | `AllowAny` | no | Login |
-| `apps.core.views.HealthView` | `AllowAny` | yes | Render health check; returns `{"ok": true}` only |
+| `apps.core.views.HealthView` | `AllowAny` | yes | Container and proxy health check; returns `{"ok": true}` only |
 | `apps.core.views.WaitlistView` | `AllowAny` | yes | Landing-page form; `ScopedRateThrottle`; the same answer for new and repeat emails |
 | `drf_spectacular` `SpectacularAPIView` / `SpectacularSwaggerView` | `AllowAny` | no | `/api/schema/`, `/api/docs/`. Mounted only when `DJANGO_API_DOCS` is on, which prod defaults to off (§12) |
 
@@ -72,18 +97,18 @@ Draft.objects.filter(project_id=request.data["project"])
 - A serializer that accepts the id of a related object must check that the object is in the caller's project. Examples are a `blog_topic` or a `source_reddit_post`.
 - **Celery tasks** receive ids, never objects. They load the `AgentRun` by pk and take the project from `run.project`. Any other object is loaded scoped to that project, as in `Draft.objects.get(pk=..., project=run.project)`. A task must never act on a project other than its run's.
 - **Every new endpoint needs a tenancy test** in `backend/tests/test_tenancy.py`: another user's object returns 404 and doesn't show up in the lists. The docstring there explains why: those tests are the only thing between two customers' inboxes.
-- **Admin** (`/admin/`) is for the operator's superuser only. It shows every tenant, so no staff accounts are handed to customers.
+- **Admin** (`/admin/`) is for the operator's superuser only. It shows every tenant, so no staff accounts are handed to customers. The host proxy routes `/admin/` to Django, so it is as reachable as the login page. Treat it as internet-facing (§14).
 
 ---
 
 ## 3. Sessions, CSRF and CORS
 
-- **Same origin, no CORS, on purpose.** The SPA reaches `/api/*` on its own origin: through Vite's proxy in dev, a Render rewrite or Caddy in prod. `django-cors-headers` is not installed.
+- **Same origin, no CORS, on purpose.** The SPA reaches `/api/*` on its own origin. In dev that's through Vite's proxy. In prod the host's Caddy routes `/api`, `/admin` and `/static` to Django, and the frontend container serves the SPA. `django-cors-headers` is not installed.
   - Adding CORS middleware, `CORS_ALLOW_ALL_ORIGINS = True` or `CORS_ALLOW_CREDENTIALS` with a wildcard is **Critical**. Changing the deployment topology is a design decision to discuss, not something a PR does quietly.
 - **CSRF middleware is on.** The frontend (`frontend/src/lib/api.ts`) reads the `csrftoken` cookie, or calls `GET /api/auth/csrf/`, and sends `X-CSRFToken` on every unsafe method.
 - **No `csrf_exempt`** on an endpoint that uses a session, and no `authentication_classes = []` on a view that changes state for a user. Only the views in the §2 table skip authentication.
 - **Cookies:** session cookie HttpOnly (Django default), SameSite=Lax (default), `SESSION_COOKIE_SECURE` and `CSRF_COOKIE_SECURE` in prod.
-- `CSRF_TRUSTED_ORIGINS` comes from env plus `RENDER_EXTERNAL_HOSTNAME`. No wildcards.
+- `CSRF_TRUSTED_ORIGINS` comes from env (`DJANGO_CSRF_TRUSTED_ORIGINS`). No wildcards. The `RENDER_EXTERNAL_HOSTNAME` branch in `prod.py` is legacy and inert on the mini.
 
 ---
 
@@ -104,7 +129,7 @@ Draft.objects.filter(project_id=request.data["project"])
   - the Dockerfile's build-time `DJANGO_SECRET_KEY=collectstatic-only`
   - the dev Postgres credentials `luka/luka` in `docker-compose.yml`
 - **Never committed:** `.env` and `.env.*` (`.env.example` is the exception, and it holds names only). `.gitignore` and both `.dockerignore` files exclude them.
-- **Render:** `DJANGO_SECRET_KEY` uses `generateValue: true`; other secrets use `sync: false`.
+- **Production secrets** live in env files on the Mac mini, managed by `mini-infra`, never in this repo. They're readable by anyone with access to that machine, so the machine's own account security is part of secret management.
 - **Never visible to the browser:** a secret, token or key must not appear in an API response, a `RunEvent`, a log line, a Sentry event or the frontend bundle. The frontend has no secrets. Vite only exposes `VITE_*` variables, so don't create one that holds a key.
 
 ```python
@@ -139,18 +164,38 @@ APIFY_TOKEN = "apify_api_..."
 
 ## 6. Outbound fetches and SSRF
 
-Luka's worker fetches URLs that come from users, such as `website_url`, and from crawled pages: sitemap entries, links and redirects. **That makes the crawler an SSRF surface**, because the worker sits inside the deployment network.
+Luka's worker fetches URLs that come from users, such as `website_url`, and from crawled pages: sitemap entries, links and redirects. Because the worker sits on the operator's home network and sends from the operator's home IP (§1), every such fetch carries two risks:
+- **SSRF:** it can be pointed inward, at the LAN.
+- **Egress identity:** when it goes outward, it shows who and where the operator is.
 
+### Egress identity: tenant-chosen hosts never see the home IP
+- **Fixed provider APIs may be called directly** from the mini. That means Anthropic, the Apify API, Sentry and LangSmith. Their hosts are fixed in code, and they already know who we are.
+- **Any request to a host a tenant or a crawled page chooses must go out through an egress proxy, not the home connection.** That includes the website crawl, its `robots.txt`, sitemaps and redirects, and any future link preview, favicon or image fetch, URL check or webhook. Alternatively, the fetch can be delegated to a provider that runs it on its own network, as `ApifyRenderer` does.
+  - The proxy is configured by env, for example `CRAWL_PROXY_URL` passed to the httpx client. The proxy provider counts as a third party (§10).
+- **Production fails closed.** If the proxy isn't configured, tenant-directed fetches refuse to run rather than falling back to the home IP. Dev may go direct.
+- **The proxy doesn't replace the address checks below.** They still apply when the proxy is missing, as in dev, and they stop the crawl from reporting an internal map back to the tenant.
+- **Don't add identifying details to tenant-directed requests.** No operator name, email, domain or contact URL in the user agent or headers.
+- **Severity:** a new code path that makes the server request a tenant-chosen host directly is **HIGH**. It reveals the operator's home IP and location to any account holder in seconds, and puts the operator's connection behind whatever traffic the tenant directs.
+
+### SSRF: nothing tenant-directed may reach the home network
 - **Only `backend/providers/` makes outbound HTTP.** That means `httpx`, `urllib.request`, Apify clients and any future provider. The one exception is the Anthropic SDK in `backend/llm/`. Apps and pipelines call the provider interfaces. `test_security_patterns.py` enforces this.
 - **Scheme:** http(s) only (`providers/crawl/urls.normalize`).
 - **Host:** the crawler stays on the site being crawled (`same_site`), and that applies to **every** URL it fetches, not only page links:
   - sitemap URLs listed in `robots.txt`
   - child `<sitemap><loc>` entries
   - redirect targets, which have to be checked on each hop, not just followed
-- **Address:** a user-supplied host must not resolve to a loopback, private (RFC 1918), link-local (`169.254.0.0/16`, including cloud metadata), CGNAT, multicast or unspecified address, or the IPv6 equivalents. The check runs on the resolved address, not only on the hostname string.
+- **Address:** a user-supplied host must not resolve to any of these:
+  - loopback, private (RFC 1918) or link-local (`169.254.0.0/16`) addresses
+  - CGNAT, multicast, reserved or unspecified addresses
+  - the IPv6 equivalents, including IPv4-mapped forms
+
+  On the mini this list covers the home LAN, the Mac's own services (`host.docker.internal` resolves to a private address) and the Docker network. The check runs on the **resolved** address before every request, including each redirect hop, not only on the hostname string. That catches a public name that resolves to `192.168.x.x`.
 - **Size and time:** bounded timeouts (15s) and a byte cap enforced **while streaming**, not after `resp.content` has been read into memory.
 - **Nothing fetched is echoed raw to the API.** Crawled text reaches users only after extraction, in context docs. Error bodies from fetched URLs are never returned.
-- **Fetches that happen elsewhere:** `ApifyRenderer` sends only same-site URLs to Apify with `maxCrawlDepth: 0`, so Apify's servers do the fetch. `ApifyRedditSource` builds URLs on a fixed host (`www.reddit.com`), and any user part (the subreddit) is URL-encoded.
+- **Nothing fetched reports a map of the network back.** Skip reasons a tenant can see in `RunEvent` data say "skipped" or "unreachable". They don't give HTTP status codes for hosts the crawler shouldn't have been fetching, because those turn the crawler into a LAN port scanner.
+- **Fetches that happen elsewhere:**
+  - `ApifyRenderer` must send only same-site URLs to Apify, with `maxCrawlDepth: 0`, so Apify's servers do the fetch. Today it also forwards off-site redirect targets (§14).
+  - `ApifyRedditSource` builds URLs on a fixed host (`www.reddit.com`), and any user part (the subreddit) is URL-encoded.
 
 ```python
 # WRONG: fetching a URL a crawled page told us about, without re-checking the site
@@ -159,7 +204,7 @@ queue.extend(doc.child_sitemaps)          # could be http://169.254.169.254/...
 queue.extend(u for u in doc.child_sitemaps if same_site(u, root))
 ```
 
-Severity: SSRF whose response a tenant can read back is **Critical**. That includes the text stored in `CrawledPage`, context docs, and `RunEvent` data such as an `HTTP <status>` skip reason. Blind SSRF is **High**.
+Severity: SSRF whose response a tenant can read back is **Critical**. That includes the text stored in `CrawledPage`, context docs, and `RunEvent` data such as an `HTTP <status>` skip reason. On a home network the readable targets are real: router and NAS admin pages are HTML. Blind SSRF is **High**.
 
 ---
 
@@ -187,7 +232,7 @@ Luka's prompts are full of text we don't control: crawled pages, Reddit posts an
 
 **Rules:**
 - **No new side effects from model output without a human in the loop.** Examples: publishing, sending, changing schedules or `enabled`, raising limits, or calling a new external API. A new side effect is **High** unless a human confirms it in the UI.
-- **Tools:** `VALID_TOOLS = {"web_search"}` (`llm/prompts.py`), enabled only in the competitors prompt, with `web_search_max_uses` set. Adding a tool, especially one that reaches our own systems or fetches arbitrary URLs from our infrastructure, needs this document updated and is reviewed as a new trust boundary.
+- **Tools:** `VALID_TOOLS = {"web_search"}` (`llm/prompts.py`), enabled only in the competitors prompt, with `web_search_max_uses` set. Adding a tool, especially one that reaches our own systems or fetches arbitrary URLs from the mini (the home network and the home IP, §6), needs this document updated and is reviewed as a new trust boundary.
 - **Structured output is validated.** Model output is parsed with Pydantic (`model_validate_json`) and never `eval`'d or executed. It is not used as a URL, path, SQL, shell command or template without validation.
 - **Model output shown in the UI** follows §8. Markdown is rendered without raw HTML, and links are http(s) only.
 
@@ -243,6 +288,7 @@ These are banned in application code (not tests or migrations). `test_security_p
   - **Apify:** same-site URLs and Reddit search terms
   - **LangSmith:** prompt inputs and outputs, only when `LANGSMITH_TRACING` is on
   - **Sentry:** identifiers only
+  - **The egress proxy (§6), once added:** the URLs the crawler fetches and the responses that come back
 
   Sending content anywhere new is a new trust boundary, so update this list.
 - **Anti-enumeration:** the waitlist answers new and repeat emails the same way. `current_project` treats "not yours" like "doesn't exist". Keep that behaviour on new public or cross-object endpoints.
@@ -268,12 +314,24 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
 
 ---
 
-## 12. Production settings
+## 12. Production settings and host exposure
 
-`config/settings/prod.py`:
+### What the mini exposes
+- **Only the host proxy (Caddy) is reachable from outside the machine.** Django/gunicorn, the frontend container, Postgres, Redis and Celery are not published on the host's network interfaces:
+  - in the production compose, no `ports:` for them, or bound to `127.0.0.1` at most
+  - reachable only on the internal Docker network
+
+  The dev `docker-compose.yml` publishes ports 8000, 5173 and 5433; it's for a developer's machine, never production.
+- **Internet exposure goes through one deliberate path** chosen in `mini-infra`, such as a tunnel or one forwarded port to Caddy. Prefer a tunnel: it doesn't publish the home IP in DNS. Once the IP is hidden at the front, the crawler must not reveal it at the back (§6).
+- **TLS ends at the edge** (the tunnel or Caddy). `SECURE_PROXY_SSL_HEADER` trusts `X-Forwarded-Proto` only because the host proxy sets it. The proxy must overwrite, not pass through, a client-supplied `X-Forwarded-For` / `X-Forwarded-Proto`.
+- **The Docker socket is never mounted** into an app container.
+- **Containers stay on their own network.** None runs with `network_mode: host`, and none is privileged.
+- **The SPA's HTML** should carry the same security headers as the API: CSP, `X-Frame-Options`, `nosniff`, `Referrer-Policy`. Today `frontend/Caddyfile.prod` sets only cache headers (§14).
+
+### `config/settings/prod.py`
 - `DEBUG = False`
 - `SECRET_KEY` required, with no default
-- `ALLOWED_HOSTS` from env plus the Render host
+- `ALLOWED_HOSTS` from env (the `RENDER_EXTERNAL_HOSTNAME` branch is legacy)
 - `SECURE_SSL_REDIRECT` (default on), `SECURE_PROXY_SSL_HEADER`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_CONTENT_TYPE_NOSNIFF`
 - `X_FRAME_OPTIONS = "DENY"` (Django default)
 - API schema and Swagger off (`DJANGO_API_DOCS` defaults to false)
@@ -283,6 +341,7 @@ A PR must not:
 - use `ALLOWED_HOSTS = ["*"]` outside `dev.py`
 - turn off secure cookies or SSL redirect in prod
 - publish `/api/schema/` in prod
+- publish a backing service's port, mount the Docker socket, or use host networking in a production image or compose snippet
 
 ---
 
@@ -290,10 +349,12 @@ A PR must not:
 
 | Severity | Meaning | Luka examples |
 |---|---|---|
-| **CRITICAL** | Direct compromise of another tenant, the operator or the server | Unscoped lookup exposing another project's rows; a non-public view reachable anonymously; a committed secret; RCE (pickle, `yaml.load`, template from user text, `shell=True` with data); SSRF with a readable response; CORS wildcard with credentials; `DEBUG=True` in prod |
-| **HIGH** | Exploitable with some precondition, or serious data exposure | Stored XSS (raw HTML in markdown, a `javascript:` URL in `href`/`window.open`); blind SSRF; model output causing an effect outside the §7 allowlist; tracebacks or secrets in API responses, `RunEvent`s or logs; a Celery task acting outside `run.project`; unbounded tenant-triggered spend; `csrf_exempt` on an authenticated write |
+| **CRITICAL** | Direct compromise of another tenant, the operator, the server or the home network | Unscoped lookup exposing another project's rows; a non-public view reachable anonymously; a committed secret; RCE (pickle, `yaml.load`, template from user text, `shell=True` with data); SSRF with a readable response (LAN pages, the Mac's services); Postgres or Redis published beyond the host; the Docker socket mounted in a container; CORS wildcard with credentials; `DEBUG=True` in prod |
+| **HIGH** | Exploitable with some precondition, or serious data exposure | Stored XSS (raw HTML in markdown, a `javascript:` URL in `href`/`window.open`); blind SSRF or a LAN port/status oracle; a server request to a tenant-chosen host that leaves from the home IP (§6); model output causing an effect outside the §7 allowlist; tracebacks or secrets in API responses, `RunEvent`s or logs; a Celery task acting outside `run.project`; unbounded tenant-triggered spend; `csrf_exempt` on an authenticated write |
 | **MEDIUM** | Needs unusual conditions, or weakens a defence | No throttle on login; missing security headers or CSP; a bad query param causing a 500; content sent to a new third party without an update here; a generous but bounded spend limit |
 | **LOW** | Hardening, defence in depth | Insecure defaults outside prod; verbose non-secret log lines |
+
+**Grade with the §1 threat model.** Any account may be hostile, and the operator's home network sits behind the server. "Only invited users can do this" never lowers a severity.
 
 **Gate:** a PR may not be pushed with an open CRITICAL or HIGH finding that it introduced or made worse. MEDIUM and LOW are listed in the PR description and can be deferred. Deferred items that are accepted go into §14.
 
@@ -303,31 +364,64 @@ A PR must not:
 
 These are issues already in `main`. A branch scan does not report them again, **unless the PR makes one worse or touches the code involved without fixing it when the fix is small.** When one is fixed, delete it from this list in the same PR.
 
+### Critical
+1. **Crawler SSRF into the home network** (`providers/crawl/crawler.py`). Regraded from High after the 2026-09-30 audit, and the move to the mini makes the targets real.
+   - **Entry points:**
+     - Nothing checks `website_url`'s address, so `http://192.168.1.1/` or `http://host.docker.internal:…` is accepted (it comes from `StartOnboardingSerializer` or `PATCH /api/project`).
+     - `follow_redirects=True` follows an on-site redirect to any host without re-checking it.
+     - Sitemap URLs from `robots.txt` and child `<sitemap><loc>` entries are fetched without a `same_site` check.
+   - **Read-back channels:**
+     - `RunEvent` skip reasons (`HTTP <status>`, `not HTML`, `HTTP error`) work as a LAN port and status scanner.
+     - Internal HTML page titles appear in `/api/context/pages/`.
+     - Page text reaches the context docs.
+     - Off-site redirect targets are also sent to Apify (`crawler.py:144`).
+
 ### High
-1. **Crawler SSRF** (`providers/crawl/crawler.py`):
-   - Sitemap URLs from `robots.txt` and child `<sitemap><loc>` entries are fetched without a `same_site` check.
-   - Redirects are followed without re-checking scheme or host.
-   - Nothing blocks private, loopback or link-local addresses for `website_url`.
-2. **`RedditPost.url` scheme never validated.** It comes from Apify, is stored with `bulk_create` (which skips validators), and is rendered as `href` and returned as `open_url` for `window.open`.
-3. **Tracebacks reach the client.** `agents/runs.py` stores `traceback.format_exc()` in `AgentRun.error`, which `AgentRunSerializer` and `agent_summary.last_error` expose.
+1. **Tenant-directed fetches leave from the home IP** (`providers/crawl/crawler.py`). The crawler fetches the tenant's site directly from the mini, with a distinctive `LukaBot/0.1` user agent. Any account holder can read the operator's home IP, and so their approximate location and ISP, from their own access logs. The crawl traffic is also attributed to the operator's home connection. The fix is the egress proxy in §6, failing closed in production.
+2. **Unbounded Reddit/Apify spend** (`apps/reddit/config.py:7-8`).
+   - `subreddits` and `keywords` have no count, length or format limit.
+   - Apify start URLs = subreddits × keyword queries, with at least 5 results per URL (`providers/reddit/apify.py:109`), and nothing caps total items or charge.
+   - Each run is limited only by the 15-minute actor timeout, and runs repeat through run-now or cron (Medium 4).
+3. **`RedditPost.url` scheme never validated.** It comes from Apify, is stored with `bulk_create` (which skips validators), and is rendered as `href` and returned as `open_url` for `window.open`.
+4. **Internal error text reaches the client:**
+   - `agents/runs.py` stores `traceback.format_exc()` in `AgentRun.error`, which `AgentRunSerializer` and `agent_summary.last_error` expose.
+   - The same goes for the `"Failed: {exc}"` `RunEvent` (`runs.py:137`).
+   - It also goes for `score_error` in the skipped-posts API (`agents/api.py:138`).
 
 ### Medium
-1. The login view has no throttle or lockout, and `AUTH_PASSWORD_VALIDATORS` isn't set.
-2. The waitlist throttle is keyed on the whole `X-Forwarded-For` header (`NUM_PROXIES` unset) and uses per-process LocMem cache.
-3. `SECURE_HSTS_SECONDS` defaults to 0. There's no CSP, and the SPA HTML served by Caddy or the Render static site has no security headers.
+1. The login view has no throttle or lockout, and `AUTH_PASSWORD_VALIDATORS` isn't set. With a public login page this is the first thing to fix after the Criticals and Highs.
+2. **Login CSRF** (`apps/core/views.py` `LoginView`). DRF exempts unauthenticated POSTs from CSRF, and `FormParser` is enabled. A cross-site form can sign a visitor into an attacker's account, and whatever the visitor then enters ends up there. It was Low while accounts were invite-only; the §1 threat model raises it.
+3. `/admin/` is reachable through the host proxy, with no IP allowlist, 2FA or separate throttle. Restrict it to the private network or a VPN, or put it behind its own auth.
 4. There's no minimum interval for agent cron; `* * * * *` is accepted (§11).
-5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7).
-6. Crawled text sits in the system prompt with unescaped `url`/`title` attributes under "Treat these as ground truth."
-7. Markdown renders remote images, which a model-written doc could use as a beacon.
-8. Unvalidated query params cause 500s: `agents/views.py` `int(after)`, `agents/api.py` `int(min_score)` and `run_id`.
-9. `EditSerializer.content` is an untyped `JSONField`, so a non-dict body raises `TypeError` and returns a 500.
-10. The crawler's `MAX_BYTES` is checked after the whole body is downloaded.
-11. `ApifyRedditSource` doesn't URL-encode the subreddit in the search URL. The host is fixed.
+5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7), and the seeded values skip `RedditAgentConfig` validation.
+6. **No size caps on tenant text rendered into every LLM call:**
+   - policy rules and `blog_disclaimer` (`apps/policy/views.py`)
+   - context-doc `content_md` (`apps/context/serializers.py`)
+   - `competitors` (`apps/core/serializers.py`)
+
+   This is a bounded spend multiplier.
+7. `SECURE_HSTS_SECONDS` defaults to 0. There's no CSP, and `frontend/Caddyfile.prod` adds no security headers to the SPA's HTML (§12).
+8. The waitlist throttle is keyed on the whole `X-Forwarded-For` header (`NUM_PROXIES` unset) and uses per-process LocMem cache.
+9. Crawled text sits in the system prompt with unescaped `url`/`title` attributes under "Treat these as ground truth."
+10. Markdown renders remote images, which a model-written doc could use as a beacon. That leaks the *viewer's* IP to whoever controls the image URL.
+11. **Unvalidated input causes 500s:**
+    - query params: `agents/views.py` `int(after)`, `agents/api.py` `int(min_score)` and `run_id`
+    - untyped `JSONField`s: `EditSerializer.content` and `BlogTopic.target_keywords` via `RequestTopicSerializer`
+12. The crawler's `MAX_BYTES` is checked after the whole body is downloaded.
+13. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
+    - skipped posts
+    - policy (GET, PATCH, apply-pack)
+    - context pages, revisions and regenerate
+    - topic draft
+    - agent runs and run-now
+
+    The code is scoped correctly today.
 
 ### Low
 1. The base `SECRET_KEY` default is `dev-insecure-change-me`. Prod requires a real one.
-2. `/admin/` has no IP allowlist, 2FA or separate throttle.
-3. With LangSmith on, full prompt variables (crawled text, drafts) go to LangSmith.
+2. With LangSmith on, full prompt variables (crawled text, drafts) go to LangSmith.
+3. The number of X items and blog topics saved follows the model's output, not `posts_per_run` / `topics_per_run` (`apps/xagent/pipeline.py`, `apps/content/pipeline.py`). This is bounded by `max_tokens`.
+4. `ApifyRedditSource` doesn't URL-encode the subreddit in the search URL. The host is fixed. High 2's format check would close this.
 
 ---
 
@@ -346,7 +440,11 @@ These are issues already in `main`. A branch scan does not report them again, **
 | **Secrets** | Secret in a response, `RunEvent`, log line or `VITE_*` var | HIGH |
 | **Input** | Body read without a serializer; `int()` on a query param without a guard; untyped `JSONField` | MEDIUM |
 | **SSRF** | Outbound HTTP outside `providers/` / `llm/` | HIGH |
-| **SSRF** | Fetching a URL without scheme, same-site and private-address checks | HIGH (CRITICAL if the response is readable) |
+| **SSRF** | Fetching a URL without scheme, same-site and resolved private-address checks (on every redirect hop) | HIGH (CRITICAL if the response is readable) |
+| **Egress** | Server request to a tenant- or page-chosen host that doesn't go through the egress proxy, or falls back to the home IP when the proxy is missing | HIGH |
+| **Egress** | Operator-identifying details (name, email, domain) in the user agent or headers of tenant-directed requests | MEDIUM |
+| **Host** | Production compose or image publishes Postgres, Redis, Django or Celery ports; mounts the Docker socket; uses host networking or privileged mode | CRITICAL |
+| **Host** | Internet exposure that bypasses the host proxy, or the proxy passing through client `X-Forwarded-*` headers | HIGH |
 | **LLM** | Model output causing an effect outside the §7 allowlist | HIGH |
 | **LLM** | New tool, or a user string compiled as a template | HIGH / CRITICAL |
 | **XSS** | `dangerouslySetInnerHTML`, `rehype-raw`, a permissive `urlTransform` | HIGH |

@@ -16,6 +16,16 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - Don't use trafilatura's `deduplicate=True`: its cache lasts the whole process, so in a long-lived worker it drops text seen on earlier pages or in earlier crawls.
 - Frontend styling is only `frontend/src/styles/tokens.css` variables. No visual polish until the design system lands. The token names, components and screens are specified in `docs/design-brief.md` (the Claude Design brief); build against those names.
 
+## Deployment and threat model
+
+- **Production is a Mac mini on the operator's private (home) network, not Render.** It runs Docker Compose behind Caddy. The host side lives in the separate `mini-infra` repo: the compose file, the host proxy that routes `/api`, `/admin` and `/static` to Django, and the production env files. This repo provides the images (`backend/Dockerfile`, `frontend/Dockerfile.prod`).
+- **`render.yaml` and the Render notes in the README are legacy.** Nothing is deployed from them. Don't extend them, and don't design anything around Render features such as rewrites, `RENDER_*` env vars or managed Postgres.
+- **What hosting at home means for code:**
+  - The server's network is a home LAN. Anything the worker can be made to fetch can reach the router, other devices and services on the Mac itself.
+  - Every outbound request leaves from the operator's residential IP. A request to a host a tenant chooses reveals that IP, and the traffic is attributed to the operator.
+  - `docs/security-patterns.md` §1 and §6 hold the rules.
+- **Assume the login page is on the internet and any account may be hostile.** A public login, possibly with signup, is planned, perhaps while Luka is still on the mini. "Accounts are created by an admin" is never a reason to accept a risk or lower a finding's severity.
+
 ## Claude Code on the web (sandbox)
 `.claude/hooks/session-start.sh` prepares a cloud session: a Python 3.13 venv at `.venv` (on `PATH`), Postgres on `localhost:5433` (role/db `luka`, migrated and bootstrapped with `admin`/`admin`), Redis on 6379, `frontend/node_modules`, and `REDDIT_SOURCE=fake`. No Docker. Checks: `pytest` and `ruff check .` in `backend/`; `npm run lint` and `npm test` in `frontend/`. Run the app with `python manage.py runserver` (`config.settings.dev`) and `npm run dev`. Real LLM or Apify calls need keys in the environment's secrets.
 
@@ -89,7 +99,7 @@ Luka is an AI growth assistant for a company's marketing. Users own projects: ea
 ## Decisions and flags (please check these)
 1. **Apify actor: `harshmaur/reddit-scraper`.** Its `withinCommunity` option runs a keyword search inside one subreddit, which is exactly our subreddit × keyword model. It supports sort `new` plus a time range, returns score, comment count and created time, and costs about $2 per 1k results plus $0.02 per run. Its store page reports 99.3% run success. The fallback is `trudax/reddit-scraper-lite` (largest user base, 4.57★, $3.40 per 1k, `searches` + `startUrls`). The actor ID and input mapping live in `providers/reddit/apify.py`, so switching is a config change. Before M3 I'll make one real test run of each actor to confirm the output fields.
 2. **Status line and progress: polling, not SSE.** TanStack Query polls `/api/status` every 2s while a run is active and every 15s when idle. SSE under Django needs ASGI and long-lived connections on Render, which isn't worth it at this scale. Progress events go to a `RunEvent` table, so SSE can be added later with no model changes.
-3. **Render session auth and the separate static site.** The frontend static site rewrites `/api/*` to the web service, so the browser sees the API on the same origin. That avoids SameSite=None cookies and CORS. I'll check this works in M6. If Render's rewrite doesn't pass cookies through correctly, the fallback is cross-site cookies (`SESSION_COOKIE_SAMESITE=None`, `CSRF_TRUSTED_ORIGINS`, `django-cors-headers` with credentials).
+3. **Render session auth and the separate static site** (superseded: production moved to the Mac mini, where the host's Caddy routes `/api` to Django so the API stays same-origin; see "Deployment and threat model"). The frontend static site rewrites `/api/*` to the web service, so the browser sees the API on the same origin. That avoids SameSite=None cookies and CORS. I'll check this works in M6. If Render's rewrite doesn't pass cookies through correctly, the fallback is cross-site cookies (`SESSION_COOKIE_SAMESITE=None`, `CSRF_TRUSTED_ORIGINS`, `django-cors-headers` with credentials).
 4. **Editable schedules: `django-celery-beat` DatabaseScheduler.** Saving an `AgentConfig` upserts its `PeriodicTask` (crontab), and beat picks up the change without a restart.
 5. **Claude API details that shape the `llm/` module:**
    - Prompt caches are **per model**. Context docs cached for Sonnet aren't reused by Haiku. That's fine because each model builds its own warm cache. Haiku 4.5 only caches prefixes of **4096 tokens or more**. The context docs will usually be longer than that; if not, the call simply isn't cached and nothing breaks.
@@ -185,4 +195,4 @@ Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent
 ## Verification
 - `docker compose up` brings up everything. Log in with the superuser from `createsuperuser`.
 - `pytest` runs with Anthropic and Apify mocked (`respx` / `unittest.mock`) and `FakeRedditSource`.
-- Per milestone: M2, onboard a real company URL and watch progress reach Context. M3, "Run now" on Reddit with real Apify and small limits, then check drafts, skipped list, LLMCall costs, and that LangSmith traces appear. Run one scheduled batch to confirm the `waiting_batch` → drafts flow and that `cache_read_input_tokens > 0` on repeat calls. M6, deploy the Blueprint to Render and confirm login works through the rewrite.
+- Per milestone: M2, onboard a real company URL and watch progress reach Context. M3, "Run now" on Reddit with real Apify and small limits, then check drafts, skipped list, LLMCall costs, and that LangSmith traces appear. Run one scheduled batch to confirm the `waiting_batch` → drafts flow and that `cache_read_input_tokens > 0` on repeat calls. M6, deploy to the production host (originally the Render Blueprint, now the Mac mini via `mini-infra`) and confirm login works through the proxy.

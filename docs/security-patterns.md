@@ -176,27 +176,34 @@ Until then:
 - **Fixed provider APIs are called directly from the mini:** Anthropic, the Apify API, Sentry and LangSmith. Their hosts are fixed in code.
 - **Don't add identifying details to tenant-directed requests.** No operator name, email, domain or contact URL in the user agent or headers. The IP is accepted; giving away more than the IP is not.
 - **Don't build anything that relies on the home IP being secret.** A tunnel keeps it out of DNS, but a tenant can still learn it through the crawler.
-- **Keep the eventual fix cheap.** Tenant-directed fetches go through `providers/crawl/` and its httpx client. When the egress fix lands, it can then be a single change, for example a proxy or relay URL from env that production requires.
+- **Keep the eventual fix cheap.** Tenant-directed fetches go through `guarded_client` (`providers/crawl/http.py`). When the egress fix lands, it can then be a single change there, for example a proxy or relay URL from env that production requires.
 - **Revisit when** signup opens to the public at scale, abuse or blocklisting of the home IP shows up, or Luka moves off the mini.
 
 ### SSRF: nothing tenant-directed may reach the home network
 - **Only `backend/providers/` makes outbound HTTP.** That means `httpx`, `urllib.request`, Apify clients and any future provider. The one exception is the Anthropic SDK in `backend/llm/`. Apps and pipelines call the provider interfaces. `test_security_patterns.py` enforces this.
+- **Every tenant-directed fetch uses `guarded_client()`** (`providers/crawl/http.py`). It's the only place an httpx client is built; `test_security_patterns.py` enforces that. The client:
+  - checks addresses **at connect time**. Its httpcore network backend (`GuardedBackend`) resolves the host, refuses the connection if **any** answer isn't public, and connects to the exact address it checked. That covers robots.txt, sitemaps, pages and every redirect hop, and leaves no gap for DNS rebinding. TLS still uses the hostname for SNI and certificate checks.
+  - doesn't follow redirects itself, so the crawler can apply the same-site rule to each hop
+  - ignores proxy environment variables (`trust_env=False`)
+  - Any new fetch of a URL a tenant or a page chooses (link previews, webhooks, favicons) reuses this client.
 - **Scheme:** http(s) only (`providers/crawl/urls.normalize`).
 - **Host:** the crawler stays on the site being crawled (`same_site`), and that applies to **every** URL it fetches, not only page links:
   - sitemap URLs listed in `robots.txt`
   - child `<sitemap><loc>` entries
-  - redirect targets, which have to be checked on each hop, not just followed
+  - redirect targets, checked on each hop by `Crawler._get` (at most 5). A redirect to another host is skipped as "redirected off-site", not followed.
 - **Address:** a user-supplied host must not resolve to any of these:
   - loopback, private (RFC 1918) or link-local (`169.254.0.0/16`) addresses
   - CGNAT, multicast, reserved or unspecified addresses
   - the IPv6 equivalents, including IPv4-mapped forms
 
-  On the mini this list covers the home LAN, the Mac's own services (`host.docker.internal` resolves to a private address) and the Docker network. The check runs on the **resolved** address before every request, including each redirect hop, not only on the hostname string. That catches a public name that resolves to `192.168.x.x`.
-- **Size and time:** bounded timeouts (15s) and a byte cap enforced **while streaming**, not after `resp.content` has been read into memory.
+  On the mini this list covers the home LAN, the Mac's own services (`host.docker.internal` resolves to a private address) and the Docker network. The check runs on the **resolved** address at connect time (`GuardedBackend`), not only on the hostname string. That catches a public name that resolves to `192.168.x.x`.
+  - The crawl also checks the start host up front, so a private or unknown site fails the run with a clear message instead of a list of skipped pages.
+  - Serializers reject plainly local URLs with a 400 (`apps/core/validators.public_website_url`). That's a friendly early check, not the gate.
+- **Size and time:** bounded timeouts (15s) and a byte cap (`MAX_BYTES`) enforced **while streaming**: an oversized `Content-Length` is refused unread, and the decoded body is counted chunk by chunk.
 - **Nothing fetched is echoed raw to the API.** Crawled text reaches users only after extraction, in context docs. Error bodies from fetched URLs are never returned.
-- **Nothing fetched reports a map of the network back.** Skip reasons a tenant can see in `RunEvent` data say "skipped" or "unreachable". They don't give HTTP status codes for hosts the crawler shouldn't have been fetching, because those turn the crawler into a LAN port scanner.
+- **Nothing fetched reports a map of the network back.** Skip reasons a tenant can see in `RunEvent` data are generic for anything off the site: "blocked address", "unreachable", "redirected off-site". HTTP status codes like "HTTP 404" can only come from the tenant's own public site, because nothing else is ever fetched.
 - **Fetches that happen elsewhere:**
-  - `ApifyRenderer` must send only same-site URLs to Apify, with `maxCrawlDepth: 0`, so Apify's servers do the fetch. Today it also forwards off-site redirect targets (§14).
+  - `ApifyRenderer` gets only same-site URLs, with `maxCrawlDepth: 0`, so Apify's servers do the fetch. `_render_thin_pages` re-checks `same_site` before handing them over.
   - `ApifyRedditSource` builds URLs on a fixed host (`www.reddit.com`), and any user part (the subreddit) is URL-encoded.
 
 ```python
@@ -366,18 +373,6 @@ A PR must not:
 
 These are issues already in `main`. A branch scan does not report them again, **unless the PR makes one worse or touches the code involved without fixing it when the fix is small.** When one is fixed, delete it from this list in the same PR.
 
-### Critical
-1. **Crawler SSRF into the home network** (`providers/crawl/crawler.py`). Regraded from High after the 2026-09-30 audit, and the move to the mini makes the targets real.
-   - **Entry points:**
-     - Nothing checks `website_url`'s address, so `http://192.168.1.1/` or `http://host.docker.internal:…` is accepted (it comes from `StartOnboardingSerializer` or `PATCH /api/project`).
-     - `follow_redirects=True` follows an on-site redirect to any host without re-checking it.
-     - Sitemap URLs from `robots.txt` and child `<sitemap><loc>` entries are fetched without a `same_site` check.
-   - **Read-back channels:**
-     - `RunEvent` skip reasons (`HTTP <status>`, `not HTML`, `HTTP error`) work as a LAN port and status scanner.
-     - Internal HTML page titles appear in `/api/context/pages/`.
-     - Page text reaches the context docs.
-     - Off-site redirect targets are also sent to Apify (`crawler.py:144`).
-
 ### High
 1. **Unbounded Reddit/Apify spend** (`apps/reddit/config.py:7-8`).
    - `subreddits` and `keywords` have no count, length or format limit.
@@ -408,8 +403,7 @@ These are issues already in `main`. A branch scan does not report them again, **
 11. **Unvalidated input causes 500s:**
     - query params: `agents/views.py` `int(after)`, `agents/api.py` `int(min_score)` and `run_id`
     - untyped `JSONField`s: `EditSerializer.content` and `BlogTopic.target_keywords` via `RequestTopicSerializer`
-12. The crawler's `MAX_BYTES` is checked after the whole body is downloaded.
-13. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
+12. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
     - skipped posts
     - policy (GET, PATCH, apply-pack)
     - context pages, revisions and regenerate
@@ -449,9 +443,9 @@ These are real issues that the operator has decided to live with for now. Scans 
 | **Secrets** | Secret in a response, `RunEvent`, log line or `VITE_*` var | HIGH |
 | **Input** | Body read without a serializer; `int()` on a query param without a guard; untyped `JSONField` | MEDIUM |
 | **SSRF** | Outbound HTTP outside `providers/` / `llm/` | HIGH |
-| **SSRF** | Fetching a URL without scheme, same-site and resolved private-address checks (on every redirect hop) | HIGH (CRITICAL if the response is readable) |
+| **SSRF** | Fetching a tenant- or page-chosen URL without `guarded_client`, or following a redirect / sitemap without the same-site check | HIGH (CRITICAL if the response is readable) |
 | **Egress** | Server request to a tenant- or page-chosen host from the home IP (accepted risk: flag it, fixing not required for now, §6) | MEDIUM |
-| **Egress** | Tenant-directed fetch outside `providers/crawl/`'s client, so the eventual egress fix wouldn't cover it (§6) | MEDIUM |
+| **Egress** | Tenant-directed fetch outside `guarded_client`, so the eventual egress fix wouldn't cover it (§6) | MEDIUM |
 | **Egress** | Operator-identifying details (name, email, domain) in the user agent or headers of tenant-directed requests | MEDIUM |
 | **Host** | Production compose or image publishes Postgres, Redis, Django or Celery ports; mounts the Docker socket; uses host networking or privileged mode | CRITICAL |
 | **Host** | Internet exposure that bypasses the host proxy, or the proxy passing through client `X-Forwarded-*` headers | HIGH |

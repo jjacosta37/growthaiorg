@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.core.validators import public_website_url
+
 from .models import ContextDocument, ContextDocumentRevision, CrawledPage, DocKind
 
 
@@ -30,7 +32,7 @@ class CrawledPageSerializer(serializers.ModelSerializer):
 
 
 class StartOnboardingSerializer(serializers.Serializer):
-    website_url = serializers.URLField()
+    website_url = serializers.URLField(validators=[public_website_url])
     name = serializers.CharField(required=False, max_length=120, help_text="Product name (detected if omitted)")
     max_pages = serializers.IntegerField(required=False, min_value=1, max_value=200)
 

@@ -92,3 +92,11 @@ def test_waitlist_is_throttled(anon):
         for i in range(11)
     ]
     assert codes[:10] == [201] * 10 and codes[10] == 429
+
+
+@pytest.mark.parametrize("url", ["http://169.254.169.254/latest", "http://10.0.0.5", "http://printer.local"])
+def test_project_website_url_must_be_public(client, project, url):
+    assert client.patch("/api/project/", {"website_url": url}, format="json").status_code == 400
+    assert client.post("/api/projects/", {"name": "Fresh", "website_url": url}, format="json").status_code == 400
+    # Blank stays allowed: a project can exist before its site is known.
+    assert client.patch("/api/project/", {"website_url": ""}, format="json").status_code == 200

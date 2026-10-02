@@ -131,6 +131,19 @@ def test_outbound_http_only_in_providers():
     assert offenders == []
 
 
+HTTPX_CLIENT = re.compile(r"\bhttpx\.(Client|AsyncClient|HTTPTransport|get|post|request|stream)\(")
+
+
+def test_httpx_clients_are_only_built_by_the_guarded_module():
+    """Tenant-directed fetches must use `guarded_client`, which refuses non-public addresses
+    (§6). A client built anywhere else would skip that check."""
+    offenders = [
+        _rel(p) for p in app_files()
+        if HTTPX_CLIENT.search(p.read_text()) and _rel(p) != "providers/crawl/http.py"
+    ]
+    assert offenders == []
+
+
 def test_celery_never_uses_pickle():
     assert getattr(settings, "CELERY_TASK_SERIALIZER", "json") == "json"
     assert "pickle" not in getattr(settings, "CELERY_ACCEPT_CONTENT", ["json"])

@@ -4,7 +4,11 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class RedditAgentConfig(BaseModel):
-    """The Reddit Agent's settings, edited on its agent page. Every call multiplier is bounded."""
+    """The Reddit Agent's settings, edited on its agent page.
+
+    `max_posts_per_run` is bounded, but the number of subreddits and keywords isn't yet, and the
+    search runs once per pair: a known spend concern (docs/security-patterns.md §14).
+    """
 
     subreddits: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)

@@ -47,6 +47,10 @@ Complex features start with `/prd`: product questions, then a short PRD in `docs
 - **ACs are a contract.** If implementation shows one is wrong or impossible, stop and ask. An approved change is logged under "Changes after agreement", never made silently.
 - Set the status to `building` when implementation starts and to `shipped` when the PR merges. The PR description lists every AC with ✅ and how it was checked.
 
+## Feature docs
+
+After a feature merges, `/feature-doc <feature>` records it in `docs/features/`: how it behaves, why it was built that way, and how it works in the code, checked against the code (`docs/features/README.md` has the template). When a later change alters a documented feature, update its doc in the same way rather than adding a new one.
+
 ## Logging and error reporting
 
 Production has no debugger attached: the log stream, the `AgentRun` row and the Sentry issue are the only things that will ever explain a failure. Write them as if they are all you get, because they are.

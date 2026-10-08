@@ -98,3 +98,4 @@ Known gaps, accepted trade-offs and ideas that were left for later.
 ## Index
 | Feature | Summary | Updated |
 |---|---|---|
+| [Reddit Agent feedback, learnings and reply voice](reddit-feedback-learnings.md) | Rate and comment on drafts; the agent folds it into editable learnings for writing and post selection. Plus custom instructions, a human-sounding reply style and replies pitched to the poster. | 2026-10-08 |

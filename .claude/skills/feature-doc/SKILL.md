@@ -62,8 +62,8 @@ A quick mechanical pass helps, e.g. extract the backticked paths and run `git ca
 - **Normal case, the feature has merged:** follow the git workflow in `CLAUDE.md`.
   1. `git switch main && git pull`, then `git switch -c docs/feature-<slug>`. If the working tree has unrelated changes, ask before switching.
   2. Commit only the doc, the index row and any PRD status change. Use the message `Document <feature name>` (or `Update the <feature name> doc`), ending with the commit attribution lines from the system reminder.
-  3. Push and open a PR titled the same as the commit. Its body is a two-line summary of what the doc covers, plus the PR attribution lines.
-  4. Run `/security-scan` before pushing, as CLAUDE.md requires for every push. On a docs-only diff it reports "no code changes" and marks HEAD.
+  3. Run `/security-scan`, as CLAUDE.md requires before every push. On a docs-only diff it reports "no code changes" and marks HEAD.
+  4. Push and open a PR titled the same as the commit. Its body is a two-line summary of what the doc covers, then the scan's `## Security scan` section, then the PR attribution lines.
 - **The feature's PR is still open:** ask whether to add the doc to that PR or to wait until it merges. Adding a commit there makes the feature branch need a new `/security-scan` before its next push.
 
 ### 8. Hand off

@@ -12,14 +12,31 @@ from .services import pending, schedule_digest
 log = logging.getLogger(__name__)
 
 
-def start_digest(project, agent_type: str, *, rebuild: bool = False) -> AgentRun:
-    """Create a queued digest run. Raises RunConflict while one is active for the project."""
+def start_digest(project: Project, agent_type: str, *, rebuild: bool = False) -> AgentRun:
+    """Create a queued digest run for the project.
+
+    Args:
+        rebuild: Re-learn from all feedback, replacing the learnings, instead of folding in
+            only the pending entries.
+
+    Raises:
+        RunConflict: A digest is already active for the project. Only one runs at a time, which
+            is what bounds digest spend.
+    """
     return create_run(project, AgentRun.Kind.DIGEST_FEEDBACK, params={"agent_type": agent_type, "rebuild": rebuild})
 
 
 @shared_task
 def digest_feedback_task(project_id: int, agent_type: str) -> None:
-    """Scheduled after new feedback: fold in whatever is still pending."""
+    """Fold in whatever feedback is still pending; scheduled after new feedback arrives.
+
+    Does nothing if an earlier digest already took the entries, or if a digest is running (that
+    one reschedules itself when it ends with entries still pending).
+
+    Args:
+        project_id: The project the feedback belongs to. It comes from server code only.
+        agent_type: The agent whose learnings to update.
+    """
     project = Project.objects.get(pk=project_id)
     if not pending(project, agent_type).exists():
         return  # an earlier digest already folded these in
@@ -35,6 +52,11 @@ def digest_feedback_task(project_id: int, agent_type: str) -> None:
 
 @shared_task
 def run_digest_task(run_id: int) -> None:
+    """Execute a queued digest run, then schedule another if more feedback arrived meanwhile.
+
+    Args:
+        run_id: A `digest_feedback` `AgentRun`, created by `start_digest`.
+    """
     run = AgentRun.objects.select_related("project").get(pk=run_id)
     agent_type = run.params["agent_type"]
     with running(run) as reporter:

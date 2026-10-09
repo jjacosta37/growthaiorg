@@ -8,7 +8,7 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 - **Only `backend/llm/` imports `anthropic`.** Pipelines call `llm.complete(...)` / `llm.batch.*`.
 - **Only `llm/tracing.py` imports `langsmith`**, for the same reason only `backend/llm/` imports `anthropic`: it is where tracing is made unable to break a run (guarded span creation, `LANGSMITH_TRACING` honoured, a failed wrap degrading to an untraced client). Everything else imports `traceable` / `trace_group` / `trace_tool` from `llm.tracing`.
 - **Only `apps/agents/external.py` writes `ExternalUsage`.** Non-LLM provider calls go through `record_external(...)`, which writes the row and reports the call together. Both rules are enforced by `tests/test_observability.py`.
-- Model IDs come from `settings.LLM_MODELS` (`fast` = `claude-haiku-4-5-20251001`, `writer` = `claude-sonnet-5`). Never hardcode.
+- Model IDs come from `settings.LLM_MODELS` (`fast` = `claude-haiku-4-5-20251001`, `writer` = `claude-sonnet-5`) and `settings.LLM_DRAFT_MODELS` (the per-agent drafting choice: `sonnet` = the writer, `opus` = `claude-opus-5-5`). Never hardcode. Projects store a drafting-model key, never an ID; `apps/agents/draft_models.py` decides which keys a project may use (the subscription gate).
 - Prompts live in `backend/prompts/<task>/vN.md` (YAML frontmatter + Jinja body). Never inline prompt strings. Bump the version instead of editing a prompt that has produced drafts. Superseded versions are deleted once no pending batch uses them (git keeps the history).
 - External data goes through adapters in `backend/providers/`. Pipelines depend on the interface, not Apify.
 - Agents are deterministic Celery pipelines. No autonomous loops.

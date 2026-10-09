@@ -316,6 +316,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - the number of subreddits and keywords (Reddit runs one search per pair)
   - `web_search_max_uses`
   - `max_tokens`
+  - the drafting model: a per-agent choice (`AgentConfig.draft_model`) that changes the price of each drafting call, not the number of calls. Opus costs about 2× Sonnet per draft. The bound is an allowlist: PATCH accepts only a key that `available_draft_models(project)` returns (`apps/agents/draft_models.py`), never a model ID, and it only affects writer-tier drafting prompts
   - feedback digests: one active digest per project (rebuild returns 409 while one runs), new feedback waits `FEEDBACK_DIGEST_DELAY_SECONDS` so a burst is one call, at most 100 entries per digest, and at most 20 undigested entries passed to a drafting call
 - **Schedules:** an agent cron must not be able to fire more often than a sensible minimum.
 - **"Run now" and regenerate** refuse to start while a run of the same kind is active (the 409 path). Keep that guard on any new trigger.

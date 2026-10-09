@@ -190,6 +190,11 @@ export type AgentConfigFor<T extends AgentType> = T extends "reddit"
     ? ContentConfig
     : XConfig;
 
+export interface DraftModelOption {
+  key: string;
+  label: string;
+}
+
 /** /api/agents/ and /api/agents/<type>/ */
 export interface AgentSummary<T extends AgentType = AgentType> {
   agent_type: T;
@@ -198,6 +203,10 @@ export interface AgentSummary<T extends AgentType = AgentType> {
   cron: string;
   config: AgentConfigFor<T>;
   publish_mode: "manual";
+  /** Key of the model this agent drafts with; one of `draft_models`. */
+  draft_model: string;
+  /** The drafting models this project may pick, in display order. */
+  draft_models: DraftModelOption[];
   last_run: AgentRun | null;
   last_error: string;
   next_run_at: string | null;

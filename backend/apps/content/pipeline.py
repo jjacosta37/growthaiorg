@@ -3,6 +3,7 @@
 import re
 
 import llm
+from apps.agents.draft_models import draft_model_for
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.context.models import CrawledPage
@@ -91,9 +92,11 @@ def seo_flags(content: dict) -> list[dict]:
 
 
 def draft_post(run: AgentRun, reporter: RunReporter, topic: BlogTopic, cfg: ContentAgentConfig) -> Draft | None:
-    reporter.step(f"Writing “{topic.title[:70]}”")
+    model_key, model = draft_model_for(run.project, AgentType.CONTENT)
+    reporter.step(f"Writing “{topic.title[:70]}”", topic_id=topic.pk, draft_model=model_key)
     try:
-        result = llm.complete("content.post", post_variables(run.project, topic, cfg), project=run.project, run=run)
+        result = llm.complete("content.post", post_variables(run.project, topic, cfg), project=run.project, run=run,
+                              model=model)
     except llm.LLMError as exc:
         reporter.error(f"Couldn't write “{topic.title[:70]}”: {exc}", exc=exc)
         return None
@@ -140,7 +143,8 @@ def regenerate(draft: Draft, nudge: str, instruction: str, run) -> DraftVersion:
     cfg = load_config(draft.project)
     text = nudge_instruction(nudge, instruction, draft.project.name)
     variables = post_variables(draft.project, topic, cfg, previous=draft.current_version.content, instruction=text)
-    result = llm.complete("content.post", variables, project=draft.project, run=run)
+    _, model = draft_model_for(draft.project, AgentType.CONTENT)
+    result = llm.complete("content.post", variables, project=draft.project, run=run, model=model)
     content = finalize_post(result.parsed, policy_for(draft.project).blog_disclaimer)
     version = services.add_version(draft, content, source=DraftVersion.Source.AI_REGENERATED, result=result,
                                    nudge=nudge, instruction=instruction)

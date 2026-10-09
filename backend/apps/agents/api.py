@@ -4,13 +4,16 @@ from django.db import transaction
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from pydantic import ValidationError as PydanticValidationError
 from rest_framework import generics, serializers, status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.errors import validation_errors
+from apps.core.models import Project
 from apps.core.selection import current_project
 
 from . import registry
+from .draft_models import available_draft_models, draft_model_options, effective_draft_key
 from .models import AgentConfig, AgentRun
 from .runs import RunConflict, create_run
 from .schedule import InvalidCron, next_run_at, parse_cron, sync_periodic_task
@@ -31,7 +34,8 @@ def agent_config(project, spec) -> AgentConfig:
     return AgentConfig.for_project(project, spec.agent_type)
 
 
-def agent_summary(project, spec) -> dict:
+def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
+    """The agent page header: schedule, config, drafting model and its options, last/next run, ready count."""
     from apps.inbox.models import Draft
 
     config = agent_config(project, spec)
@@ -46,6 +50,8 @@ def agent_summary(project, spec) -> dict:
         "cron": config.cron,
         "config": spec.config_model.model_validate(config.config).model_dump(),
         "publish_mode": config.publish_mode,
+        "draft_model": effective_draft_key(project, config.draft_model),
+        "draft_models": draft_model_options(project),
         "last_run": AgentRunSerializer(last).data if last else None,
         "last_error": last_finished.error if last_finished and last_finished.status == "failed" else "",
         "next_run_at": nxt.isoformat() if nxt else None,
@@ -64,17 +70,19 @@ class AgentConfigUpdateSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(required=False)
     cron = serializers.CharField(required=False, max_length=100)
     config = serializers.JSONField(required=False)
+    draft_model = serializers.CharField(required=False, max_length=20)
 
 
 class AgentDetailView(APIView):
-    """GET the agent summary; PATCH {enabled?, cron?, config?} (config is merged, then validated)."""
+    """GET the agent summary; PATCH {enabled?, cron?, config?, draft_model?} (config is merged, then validated)."""
 
     @extend_schema(responses={200: dict})
     def get(self, request, agent_type):
         return Response(agent_summary(current_project(request), spec_or_404(agent_type)))
 
     @extend_schema(request=AgentConfigUpdateSerializer, responses={200: dict})
-    def patch(self, request, agent_type):
+    def patch(self, request: Request, agent_type: str) -> Response:
+        """PATCH the agent's settings; draft_model must be a key this project may use."""
         spec = spec_or_404(agent_type)
         project = current_project(request)
         data = AgentConfigUpdateSerializer(data=request.data)
@@ -95,6 +103,10 @@ class AgentDetailView(APIView):
             except PydanticValidationError as exc:
                 return Response({"config": validation_errors(exc)}, status=status.HTTP_400_BAD_REQUEST)
             config.config = merged.model_dump()
+        if "draft_model" in v:
+            if v["draft_model"] not in available_draft_models(project):
+                return Response({"draft_model": ["Not an available model"]}, status=status.HTTP_400_BAD_REQUEST)
+            config.draft_model = v["draft_model"]
         if "enabled" in v:
             config.enabled = v["enabled"]
         with transaction.atomic():

@@ -264,7 +264,12 @@ export function useAgent<T extends AgentType>(type: T) {
 export function useUpdateAgent<T extends AgentType>(type: T) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { enabled?: boolean; cron?: string; config?: unknown }) =>
+    mutationFn: (body: {
+      enabled?: boolean;
+      cron?: string;
+      config?: unknown;
+      draft_model?: string;
+    }) =>
       api.patch<AgentSummary<T>>(`/agents/${type}/`, body),
     onSuccess: (agent) => {
       qc.setQueryData(keys.agent(type), agent);

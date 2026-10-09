@@ -65,7 +65,7 @@ flowchart LR
 | Database | PostgreSQL |
 | Jobs | Celery worker + Celery beat (DatabaseScheduler), Redis broker |
 | LLM | `anthropic` SDK 1.x, called only from `backend/llm/` |
-| Models | `claude-haiku-4-5-20251001` ("fast": scoring, classification, lint) and `claude-sonnet-5` ("writer": documents, drafts). Configured in settings. |
+| Models | `claude-haiku-4-5-20251001` ("fast": scoring, classification, lint) and `claude-sonnet-5` ("writer": documents, drafts). Configured in settings. Each agent can draft with a different writer model (`LLM_DRAFT_MODELS`: Sonnet or Opus), chosen on its agent page and resolved by `apps/agents/draft_models.py`. |
 | Tracing | LangSmith (`wrap_anthropic` + `@traceable`), plus our own `LLMCall` table for cost |
 | Data providers | Apify (`harshmaur/reddit-scraper` for Reddit, `apify/website-content-crawler` for JavaScript-rendered pages) |
 | Crawling | httpx + trafilatura + lxml |

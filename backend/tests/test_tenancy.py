@@ -127,6 +127,16 @@ def test_agent_config_is_per_project(client, project, other_client, other_projec
     assert PeriodicTask.objects.filter(name=f"agent:{other_project.pk}:reddit").exists()
 
 
+def test_drafting_model_is_per_project(client, project, other_client, other_project):
+    client.patch("/api/agents/reddit/", {"draft_model": "opus"}, format="json")
+    # Pointing the header at someone else's project falls back to your own, so theirs is untouched.
+    client.patch("/api/agents/reddit/", {"draft_model": "opus"}, format="json", HTTP_X_PROJECT_ID=str(other_project.pk))
+
+    assert client.get("/api/agents/reddit/").json()["draft_model"] == "opus"
+    assert other_client.get("/api/agents/reddit/").json()["draft_model"] == "sonnet"
+    assert AgentConfig.for_project(other_project, "reddit").draft_model == "sonnet"
+
+
 # --- Choosing a project -------------------------------------------------------------------
 
 

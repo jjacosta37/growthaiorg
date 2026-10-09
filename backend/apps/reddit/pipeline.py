@@ -7,6 +7,7 @@ from django.conf import settings
 from django.utils import timezone
 
 import llm
+from apps.agents.draft_models import draft_model_for
 from apps.agents.external import record_external
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
@@ -248,9 +249,10 @@ def draft_replies(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, 
     scored = sum(p.score_status == RedditPost.ScoreStatus.SCORED for p in posts)
     run.stats.update(scored=scored, above_threshold=len(candidates), threshold=cfg.relevance_threshold)
     run.save(update_fields=["stats"])
+    model_key, model = draft_model_for(run.project, AgentType.REDDIT)
     reporter.event(
         f"{len(candidates)} of {scored} scored posts are worth a reply (threshold {cfg.relevance_threshold})",
-        scored=scored, above_threshold=len(candidates), threshold=cfg.relevance_threshold,
+        scored=scored, above_threshold=len(candidates), threshold=cfg.relevance_threshold, draft_model=model_key,
         candidates=[{"reddit_id": p.reddit_id, "subreddit": p.subreddit, "score": p.relevance_score}
                     for p in sorted(candidates, key=lambda p: -p.relevance_score)],
     )
@@ -258,7 +260,8 @@ def draft_replies(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, 
     for post in sorted(candidates, key=lambda p: -p.relevance_score):
         reporter.step(f"Drafting a reply in r/{post.subreddit}: {post.title[:60]}")
         try:
-            result = llm.complete("reddit.comment", comment_variables(post, run.project), project=run.project, run=run)
+            result = llm.complete("reddit.comment", comment_variables(post, run.project), project=run.project, run=run,
+                                  model=model)
         except llm.LLMError as exc:
             reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {exc}", exc=exc)
             continue
@@ -325,7 +328,8 @@ def regenerate(draft: Draft, nudge: str, instruction: str, run: AgentRun) -> Dra
     text = nudge_instruction(nudge, instruction, draft.project.name)
     variables = comment_variables(post, draft.project, previous=draft.current_version.content["body"],
                                   instruction=text)
-    result = llm.complete("reddit.comment", variables, project=draft.project, run=run)
+    _, model = draft_model_for(draft.project, AgentType.REDDIT)
+    result = llm.complete("reddit.comment", variables, project=draft.project, run=run, model=model)
     version = services.add_version(draft, comment_content(result.parsed), source=DraftVersion.Source.AI_REGENERATED,
                                    result=result, nudge=nudge, instruction=instruction)
     compliance.lint(draft, run)

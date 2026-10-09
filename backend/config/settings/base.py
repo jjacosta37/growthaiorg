@@ -124,11 +124,19 @@ LLM_MODELS = {
     "fast": env("LLM_MODEL_FAST", default="claude-haiku-4-5-20251001"),
     "writer": env("LLM_MODEL_WRITER", default="claude-sonnet-5"),
 }
+# Models a user can pick for an agent's drafting calls (writer-tier prompts only). Projects store
+# the key, never a model ID; which keys a project may use is decided in apps/agents/draft_models.py.
+LLM_DRAFT_MODELS = {
+    "sonnet": {"label": "Sonnet", "model": LLM_MODELS["writer"]},
+    "opus": {"label": "Opus", "model": env("LLM_MODEL_OPUS", default="claude-opus-5-5")},
+}
+LLM_DRAFT_MODEL_DEFAULT = "sonnet"
 # USD per million tokens. Cache writes (5m TTL) bill at 1.25x input, cache reads at 0.1x.
 LLM_PRICING = {
     "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
     "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
     "claude-sonnet-5": {"input": 2.00, "output": 10.00},
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},
 }
 LLM_CACHE_WRITE_MULTIPLIER = 1.25
 LLM_CACHE_READ_MULTIPLIER = 0.10

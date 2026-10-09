@@ -1,9 +1,13 @@
 """X Agent: plan varied formats, draft single posts and short threads in one call, keep them
 within X's limits, and avoid repeating recent drafts."""
 
+from typing import TYPE_CHECKING
+
 import llm
+from apps.agents.draft_models import draft_model_for
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
+from apps.core.models import Project
 from apps.core.text import is_near_duplicate
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
@@ -12,6 +16,9 @@ from apps.policy.service import policy_for
 
 from .config import FORMATS, XAgentConfig
 from .length import x_length
+
+if TYPE_CHECKING:
+    from llm.client import LLMResult
 
 X_KINDS = (DraftKind.X_POST, DraftKind.X_THREAD)
 
@@ -56,14 +63,26 @@ def clean_posts(posts: list[str], max_posts: int) -> list[str]:
     return [p.strip() for p in posts if p.strip()][:max_posts]
 
 
-def revise(project, run, item: dict, cfg: XAgentConfig, instruction: str):
+def revise(project: Project, run: AgentRun, item: dict, cfg: XAgentConfig, instruction: str) -> "LLMResult":
+    """Rewrite one drafted item (a post or thread) following `instruction`, with the agent's drafting model.
+
+    Used both to shorten an over-limit post during a run and to regenerate a draft.
+
+    Args:
+        item: `{format, angle, posts}` as stored on the draft.
+        instruction: What to change, e.g. a length fix or the user's nudge.
+
+    Raises:
+        llm.LLMError: The call failed.
+    """
+    _, model = draft_model_for(project, AgentType.X)
     variables = {
         "project_name": project.name, "format": item["format"], "format_description": FORMATS.get(item["format"], ""),
         "angle": item["angle"], "posts": item["posts"], "char_limit": cfg.char_limit,
         "max_thread_posts": cfg.max_thread_posts, "instruction": instruction,
         "lengths": [x_length(p) for p in item["posts"]],
     }
-    return llm.complete("x.revise", variables, project=project, run=run)
+    return llm.complete("x.revise", variables, project=project, run=run, model=model)
 
 
 def save_draft(run, item: dict, result, cfg: XAgentConfig) -> Draft:
@@ -82,13 +101,14 @@ def run_x_agent(run: AgentRun, reporter: RunReporter) -> None:
     cfg = load_config(project)
     recent = recent_items(project, cfg.recent_window)
     formats = plan_formats(cfg, recent)
-    reporter.step(f"Drafting {len(formats)} X post(s): {', '.join(formats)}")
+    model_key, model = draft_model_for(project, AgentType.X)
+    reporter.step(f"Drafting {len(formats)} X post(s): {', '.join(formats)}", formats=formats, draft_model=model_key)
     result = llm.complete("x.posts", {
         "project_name": project.name, "author_role": policy_for(project).author_role,
         "plan": [{"id": f, "description": FORMATS[f]} for f in formats],
         "char_limit": cfg.char_limit, "max_thread_posts": cfg.max_thread_posts, "recent": recent,
         "guidance": cfg.guidance,
-    }, project=project, run=run)
+    }, project=project, run=run, model=model)
 
     seen = [r["text"] for r in recent]
     stats = {"planned": len(formats), "drafted": 0, "duplicates": 0, "revised": 0, "over_limit": 0}

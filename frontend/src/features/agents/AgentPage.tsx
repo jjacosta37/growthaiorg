@@ -11,7 +11,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { RunStatusIndicator } from "../../components/badges";
 import { DetailPane } from "../../components/Shell";
 import { Dialog, EmptyState, ErrorState, useToast } from "../../components/feedback";
-import { Button, Field, Toggle } from "../../components/primitives";
+import { Button, Field, Select, Toggle } from "../../components/primitives";
 import { ProgressTimeline } from "../../components/feedback";
 import { ApiError } from "../../lib/api";
 import { AGENT_LABEL, dateTime, relative, runSummary } from "../../lib/format";
@@ -167,6 +167,38 @@ function AgentBody({ type }: { type: AgentType }) {
                 saving={update.isPending}
               />
             )}
+
+            <Field
+              label="Drafting model"
+              htmlFor="draft-model"
+              hint="Used to write and regenerate this agent's drafts."
+            >
+              <Select
+                id="draft-model"
+                value={data.draft_model}
+                disabled={update.isPending}
+                onChange={(e) =>
+                  update.mutate(
+                    { draft_model: e.target.value },
+                    {
+                      onSuccess: () => toast.show("Drafting model saved"),
+                      onError: (error) =>
+                        toast.error(
+                          error instanceof ApiError
+                            ? error.fieldErrors.draft_model?.join(" ") || error.detail
+                            : "Couldn't save the drafting model",
+                        ),
+                    },
+                  )
+                }
+              >
+                {data.draft_models.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
             <Field label="Schedule">
               <ScheduleEditor

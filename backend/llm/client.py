@@ -59,7 +59,14 @@ class LLMResult:
         return self.call.task
 
 
-def model_for(spec: PromptSpec) -> str:
+def model_for(spec: PromptSpec, override: str | None = None) -> str:
+    """The model ID a prompt runs on.
+
+    `override` (a model ID from `settings.LLM_DRAFT_MODELS`) replaces the tier's model only for
+    writer-tier prompts, so a fast-tier task can't be routed to a writer model by mistake.
+    """
+    if override and spec.model_tier == "writer":
+        return override
     return settings.LLM_MODELS[spec.model_tier]
 
 
@@ -67,11 +74,12 @@ def output_schema(spec: PromptSpec) -> type[BaseModel] | None:
     return get_schema(spec.schema) if spec.schema else None
 
 
-def build_params(spec: PromptSpec, variables: dict, project, extra_cached: str | None = None) -> dict[str, Any]:
+def build_params(spec: PromptSpec, variables: dict, project, extra_cached: str | None = None,
+                 model: str | None = None) -> dict[str, Any]:
     """Request params for messages.create. Shared by the sync and batch paths."""
     system_text, user_text = spec.render(variables)
     params: dict[str, Any] = {
-        "model": model_for(spec),
+        "model": model_for(spec, model),
         "max_tokens": spec.max_tokens,
         "system": build_system(
             project,
@@ -133,11 +141,13 @@ def complete(
     run=None,
     version: str | None = None,
     extra_cached: str | None = None,
+    model: str | None = None,
 ) -> LLMResult:
     """Run one prompt task and return validated output.
 
     `run` links the LLMCall to an AgentRun. `extra_cached` is large shared input placed in the
-    cached system prefix (after guardrails/context docs, before task instructions).
+    cached system prefix (after guardrails/context docs, before task instructions). `model` is the
+    agent's chosen drafting model ID; it applies to writer-tier prompts only (see `model_for`).
 
     Raises LLMRefused / LLMTruncated / LLMOutputInvalid / LLMError. A failed call is still
     logged as an LLMCall row, attached to the exception as `.call`.
@@ -150,7 +160,7 @@ def complete(
     for attempt in range(2):  # one extra attempt only for schema-invalid output
         try:
             return _traced_attempt(
-                spec, variables, project, schema, run, extra_cached,
+                spec, variables, project, schema, run, extra_cached, model,
                 langsmith_extra={"name": task, "metadata": {"prompt_version": spec.version, "attempt": attempt}},
             )
         except LLMOutputInvalid as exc:
@@ -164,13 +174,13 @@ def _trace_inputs(inputs: dict) -> dict:
 
 
 @traceable(run_type="chain", process_inputs=_trace_inputs)
-def _traced_attempt(spec, variables, project, schema, run, extra_cached) -> LLMResult:
-    return _attempt(spec, variables, project, schema, run, extra_cached)
+def _traced_attempt(spec, variables, project, schema, run, extra_cached, model) -> LLMResult:
+    return _attempt(spec, variables, project, schema, run, extra_cached, model)
 
 
-def _attempt(spec: PromptSpec, variables: dict, project, schema, run, extra_cached) -> LLMResult:
+def _attempt(spec: PromptSpec, variables: dict, project, schema, run, extra_cached, model) -> LLMResult:
     client = get_client()
-    params = build_params(spec, variables, project, extra_cached)
+    params = build_params(spec, variables, project, extra_cached, model)
     usage = _Usage()
     call = LLMCall(
         project=project,

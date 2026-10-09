@@ -19,6 +19,8 @@ class AgentConfig(models.Model):
     cron = models.CharField(max_length=100, default="0 */6 * * *")
     config = models.JSONField(default=dict, blank=True)
     publish_mode = models.CharField(max_length=20, choices=PublishMode.choices, default=PublishMode.MANUAL)
+    # A key of settings.LLM_DRAFT_MODELS, never a model ID; resolved by apps.agents.draft_models.
+    draft_model = models.CharField(max_length=20, default="sonnet")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

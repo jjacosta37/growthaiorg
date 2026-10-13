@@ -58,7 +58,7 @@ class FakeApify:
         fake = self
 
         class A:
-            def call(self, run_input, run_timeout):
+            def call(self, run_input, run_timeout, max_total_charge_usd=None):
                 fake.inputs.append(run_input)
                 if fake.error:
                     raise fake.error

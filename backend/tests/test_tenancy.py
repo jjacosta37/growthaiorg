@@ -113,6 +113,24 @@ def test_topics_are_scoped(client, project, other_project):
 
     theirs.refresh_from_db()
     assert theirs.status == "proposed"
+    assert client.post(f"/api/agents/content/topics/{theirs.id}/draft/").status_code == 404
+
+
+@pytest.mark.parametrize("sort", ["opportunity", "volume", "difficulty", "evidence", "newest"])
+def test_topic_evidence_and_sorting_are_scoped(client, project, other_project, sort):
+    from apps.reddit.models import RedditPost
+
+    theirs = BlogTopic.objects.create(project=other_project, title="Theirs", search_status="ready", search_volume=9)
+    their_post = RedditPost.objects.create(project=other_project, reddit_id="t1", subreddit="s", title="secret",
+                                           url="https://www.reddit.com/r/s/comments/t1/")
+    theirs.evidence_posts.add(their_post)
+    mine = BlogTopic.objects.create(project=project, title="Mine")
+    # Even a mis-linked post from another project never shows on this project's topic.
+    mine.evidence_posts.add(their_post)
+
+    rows = client.get(f"/api/agents/content/topics/?sort={sort}").json()["results"]
+    assert [r["id"] for r in rows] == [mine.id]
+    assert rows[0]["evidence"] == []
 
 
 def test_agent_config_is_per_project(client, project, other_client, other_project):

@@ -11,12 +11,22 @@ import {
   Field,
   NumberInput,
   Segmented,
+  Select,
   Slider,
   Textarea,
   cx,
 } from "../../components/primitives";
 import { X_FORMAT_LABEL } from "../../lib/format";
-import { X_FORMATS, type ContentConfig, type RedditConfig, type XConfig } from "../../lib/types";
+import {
+  SEARCH_LANGUAGES,
+  SEARCH_MARKETS,
+  X_FORMATS,
+  type ContentConfig,
+  type OpportunityWeight,
+  type OpportunityWeights,
+  type RedditConfig,
+  type XConfig,
+} from "../../lib/types";
 
 /** Tracks edits against the saved config and reveals Save only when they differ. */
 function useDraftConfig<T>(config: T) {
@@ -206,8 +216,124 @@ export function ContentConfigForm({
         />
       </Field>
 
+      <div className="config-grid">
+        <Field label="Search market" hint="Where search volume and difficulty are measured.">
+          <Select
+            value={draft.search_country}
+            onChange={(e) => {
+              const market = SEARCH_MARKETS.find((m) => m.code === e.target.value);
+              setDraft({
+                ...draft,
+                search_country: e.target.value,
+                search_language: market?.language ?? draft.search_language,
+              });
+            }}
+          >
+            {SEARCH_MARKETS.map((m) => (
+              <option key={m.code} value={m.code}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Search language">
+          <Select
+            value={draft.search_language}
+            onChange={(e) => set("search_language", e.target.value)}
+          >
+            {SEARCH_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <WeightsField weights={draft.weights} onChange={(weights) => set("weights", weights)} />
+
       <SaveBar dirty={dirty} saving={saving} onSave={() => onSave(draft)} onReset={reset} />
     </>
+  );
+}
+
+const WEIGHT_OPTIONS: { value: OpportunityWeight; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const SIGNALS: { key: keyof OpportunityWeights; label: string; hint: string }[] = [
+  { key: "volume", label: "Search volume", hint: "How many people search for the topic each month." },
+  { key: "ease", label: "Ease of ranking", hint: "How easy it is to reach the first page of results." },
+  { key: "reddit", label: "Reddit demand", hint: "How many Reddit posts ask the question." },
+];
+
+const BALANCED: OpportunityWeights = { volume: "medium", ease: "medium", reddit: "medium" };
+
+const PRESETS: { label: string; weights: OpportunityWeights }[] = [
+  { label: "Balanced", weights: BALANCED },
+  { label: "Search first", weights: { volume: "high", ease: "medium", reddit: "low" } },
+  { label: "Community first", weights: { volume: "low", ease: "low", reddit: "high" } },
+];
+
+const sameWeights = (a: OpportunityWeights, b: OpportunityWeights) =>
+  a.volume === b.volume && a.ease === b.ease && a.reddit === b.reddit;
+
+/** "What matters most": presets plus one Off/Low/Medium/High control per signal. */
+function WeightsField({
+  weights,
+  onChange,
+}: {
+  weights: OpportunityWeights;
+  onChange: (weights: OpportunityWeights) => void;
+}) {
+  return (
+    <Field
+      label="What matters most"
+      hint="Decides the backlog's order and which topic is drafted next. Requested topics always go first."
+    >
+      <div className="stack" style={{ gap: "var(--space-3)" }}>
+        <div className="row-flex" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
+          {PRESETS.map((preset) => {
+            const active = sameWeights(weights, preset.weights);
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                aria-pressed={active}
+                className={cx("format-chip", active && "format-chip--active")}
+                onClick={() => onChange(preset.weights)}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          {!sameWeights(weights, BALANCED) && (
+            <Button variant="ghost" size="sm" onClick={() => onChange(BALANCED)}>
+              Reset to default
+            </Button>
+          )}
+        </div>
+
+        {SIGNALS.map((signal) => (
+          <div key={signal.key} className="weight-row">
+            <div className="stack" style={{ gap: "var(--space-1)" }}>
+              <span>{signal.label}</span>
+              <span className="subtle">{signal.hint}</span>
+            </div>
+            <Segmented<OpportunityWeight>
+              ariaLabel={signal.label}
+              value={weights[signal.key]}
+              onChange={(value) => onChange({ ...weights, [signal.key]: value })}
+              options={WEIGHT_OPTIONS}
+            />
+          </div>
+        ))}
+      </div>
+    </Field>
   );
 }
 

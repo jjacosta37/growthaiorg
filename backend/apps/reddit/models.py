@@ -3,7 +3,16 @@ from django.db import models
 
 class RedditPost(models.Model):
     """Every post the Reddit Agent has seen. Scored-but-undrafted posts are the "skipped" list,
-    kept so the relevance threshold can be tuned."""
+    kept so the relevance threshold can be tuned.
+
+    Posts are also fetched by the Content Agent's topic research. Those are `found_by` topic
+    research, and the next Reddit run takes them over (`handoff_run`) to draft replies, so topic
+    research never takes a reply opportunity away from the Reddit Agent.
+    """
+
+    class FoundBy(models.TextChoices):
+        REDDIT = "reddit"
+        TOPIC_RESEARCH = "topic_research"
 
     class ScoreStatus(models.TextChoices):
         PENDING = "pending"  # waiting for scoring (possibly in a batch)
@@ -24,6 +33,9 @@ class RedditPost(models.Model):
     first_seen_run = models.ForeignKey("agents.AgentRun", on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name="reddit_posts")
     fetched_at = models.DateTimeField(auto_now_add=True)
+    found_by = models.CharField(max_length=20, choices=FoundBy.choices, default=FoundBy.REDDIT)
+    handoff_run = models.ForeignKey("agents.AgentRun", on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name="handed_off_posts")
 
     score_status = models.CharField(max_length=20, choices=ScoreStatus.choices, default=ScoreStatus.PENDING)
     relevance_score = models.PositiveSmallIntegerField(null=True, blank=True, db_index=True)

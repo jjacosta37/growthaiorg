@@ -3,14 +3,31 @@
 import { useState } from "react";
 
 import { EmptyState, useToast } from "../../components/feedback";
-import { Button, ChipInput, Field, Segmented, TextInput, Textarea } from "../../components/primitives";
+import {
+  Button,
+  ChipInput,
+  Field,
+  Segmented,
+  Select,
+  TextInput,
+  Textarea,
+} from "../../components/primitives";
 import { ApiError } from "../../lib/api";
 import { useDraftTopic, useRejectTopic, useRequestTopic, useTopics } from "../../lib/queries";
-import type { BlogTopicStatus } from "../../lib/types";
+import type { BlogTopic, BlogTopicStatus, TopicSort } from "../../lib/types";
+
+const SORTS: { value: TopicSort; label: string }[] = [
+  { value: "opportunity", label: "Best opportunity" },
+  { value: "volume", label: "Search volume" },
+  { value: "difficulty", label: "Easiest to rank" },
+  { value: "evidence", label: "Most Reddit posts" },
+  { value: "newest", label: "Newest" },
+];
 
 export function TopicBacklog() {
   const [status, setStatus] = useState<BlogTopicStatus>("proposed");
-  const topics = useTopics(status);
+  const [sort, setSort] = useState<TopicSort>("opportunity");
+  const topics = useTopics(status, sort);
   const draftTopic = useDraftTopic();
   const rejectTopic = useRejectTopic();
   const toast = useToast();
@@ -35,6 +52,16 @@ export function TopicBacklog() {
         </div>
 
         <div className="card__body stack" style={{ gap: "var(--space-4)" }}>
+          <Field label="Sort by">
+            <Select value={sort} onChange={(e) => setSort(e.target.value as TopicSort)}>
+              {SORTS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           {items.length ? (
             items.map((topic) => (
               <div key={topic.id} className="topic">
@@ -47,9 +74,11 @@ export function TopicBacklog() {
                   </div>
                   {topic.angle && <span className="muted">{topic.angle}</span>}
                   {topic.why && <span className="subtle">{topic.why}</span>}
-                  {!!topic.target_keywords.length && (
+                  <TopicMetrics topic={topic} />
+                  <TopicEvidence topic={topic} />
+                  {!!otherKeywords(topic).length && (
                     <div className="row-flex" style={{ gap: "var(--space-2)", flexWrap: "wrap" }}>
-                      {topic.target_keywords.map((keyword) => (
+                      {otherKeywords(topic).map((keyword) => (
                         <span className="chip" key={keyword}>
                           {keyword}
                         </span>
@@ -104,6 +133,57 @@ export function TopicBacklog() {
 
       <RequestTopicForm />
     </>
+  );
+}
+
+const numberFormat = new Intl.NumberFormat();
+
+/** The topic's keywords other than the primary one, which the metrics line already shows. */
+function otherKeywords(topic: BlogTopic): string[] {
+  const primary = topic.primary_keyword.toLowerCase();
+  return topic.target_keywords.filter((k) => k.trim().toLowerCase().split(/\s+/).join(" ") !== primary);
+}
+
+/** The primary keyword's search data, or why there is none yet. */
+function TopicMetrics({ topic }: { topic: BlogTopic }) {
+  if (topic.search_status === "pending") {
+    return <span className="subtle">Search data pending — looked up on the next run.</span>;
+  }
+  return (
+    <div className="topic__metrics">
+      {topic.primary_keyword && <span className="chip">{topic.primary_keyword}</span>}
+      <span className="muted">
+        {numberFormat.format(topic.search_volume ?? 0)} searches/month
+        {topic.keyword_difficulty !== null && ` · difficulty ${topic.keyword_difficulty}/100`}
+      </span>
+      {topic.low_volume && <span className="badge badge--neutral">Low volume</span>}
+      {topic.search_market && <span className="subtle">{topic.search_market}</span>}
+    </div>
+  );
+}
+
+/** "Asked in N Reddit posts", expanding to links to each post. */
+function TopicEvidence({ topic }: { topic: BlogTopic }) {
+  if (!topic.evidence_count) return null;
+  const label = `Asked in ${topic.evidence_count} Reddit post${topic.evidence_count === 1 ? "" : "s"}`;
+  return (
+    <details>
+      <summary className="muted">{label}</summary>
+      <ul className="topic__evidence">
+        {topic.evidence.map((post) => (
+          <li key={post.id}>
+            {post.url ? (
+              <a href={post.url} target="_blank" rel="noopener noreferrer">
+                {post.title}
+              </a>
+            ) : (
+              post.title
+            )}{" "}
+            <span className="subtle">r/{post.subreddit}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

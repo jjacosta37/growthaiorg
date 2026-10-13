@@ -41,6 +41,7 @@ Hosting at home changes what a bug costs:
 | Model output → database, config, spend | Everything a model returns | Pydantic schemas, a fixed set of effects, nothing published automatically (§7) |
 | API → browser | Stored model output, crawled URLs, Reddit URLs | React escaping, http(s)-only URLs (§8) |
 | Tenant → operator's wallet | Any setting that multiplies LLM or Apify calls | Limits enforced on the server (§11) |
+| Worker → keyword data provider | Keywords sent out for search volume and difficulty: model-proposed topic keywords, and the titles and keywords of topics a user requests | A fixed Apify actor (which reads DataForSEO's database), no URLs, keyword length and count caps, a per-call charge cap (§6, §7, §11) |
 
 Luka is multi-tenant: **users own projects, and every domain row hangs off a project.** The worst class of bug is one user reading or changing another user's project.
 
@@ -204,7 +205,8 @@ Until then:
 - **Nothing fetched reports a map of the network back.** Skip reasons a tenant can see in `RunEvent` data are generic for anything off the site: "blocked address", "unreachable", "redirected off-site". HTTP status codes like "HTTP 404" can only come from the tenant's own public site, because nothing else is ever fetched.
 - **Fetches that happen elsewhere:**
   - `ApifyRenderer` gets only same-site URLs, with `maxCrawlDepth: 0`, so Apify's servers do the fetch. `_render_thin_pages` re-checks `same_site` before handing them over.
-  - `ApifyRedditSource` builds URLs on a fixed host (`www.reddit.com`), and any user part (the subreddit) is URL-encoded.
+  - `ApifyRedditSource` builds URLs on a fixed host (`www.reddit.com`). The subreddit, the only user part, must match Reddit's name format (`RedditAgentConfig`), so it can't carry a path, query or other host.
+  - `ApifyKeywordSource` sends keywords only, never a URL, to a fixed actor (`APIFY_KEYWORD_ACTOR`) with live Google lookups turned off. The actor's operator and its data provider see the keywords, which are topic phrases, not crawled or post text.
 
 ```python
 # WRONG: fetching a URL a crawled page told us about, without re-checking the site
@@ -235,8 +237,10 @@ Luka's prompts are full of text we don't control: crawled pages, Reddit posts an
 | Write `ContextDocument` content | onboarding, doc regenerate | Revision history; editable by a human |
 | Set `project.name`, `product_summary`, append to `project.competitors` | onboarding | Only on the caller's project; URLs normalised to http(s) |
 | Suggest a policy pack | onboarding | Only known pack ids; falls back to `general`; a user-chosen policy is never overwritten |
-| Seed the Reddit agent's `subreddits` / `keywords` **only when they are empty** | onboarding | Pydantic `RedditAgentConfig`; tracked as a known concern (§14) |
+| Seed the Reddit agent's `subreddits` / `keywords` **only when they are empty** | onboarding | Filtered to `RedditAgentConfig`'s name format, count and length limits before saving; tracked as a known concern (§14) |
 | Score posts, flag compliance issues | reddit / lint | Stored fields only |
+| Choose which of the run's Reddit posts back a proposed topic (`evidence_post_ids`) | content run (`apps/content/pipeline.py`) | Ids are kept only if they were among the posts sent in this run, which are the caller's project's; each post backs at most one topic |
+| Trigger a keyword lookup for the topics it proposes | content run (`apps/content/keywords.py`) | Spend only: at most `KEYWORD_LOOKUPS_PER_RUN` keywords per run, at most 5 per topic, each ≤80 characters and ≤10 words, `APIFY_KEYWORD_MAX_CHARGE_USD` per call; read-only data comes back and only ranks topics a human triages |
 | Write an agent's learnings (`AgentLearnings.writing_md` / `selection_md`), which later drafting and scoring prompts read | `digest_feedback` run (`apps/feedback/`) | Only from the caller's project's feedback; third-party text in the digest input (post titles, draft excerpts) is escaped and delimited as data; shown, editable and rebuildable on the agent page; only shapes drafts and scores, which a human triages |
 
 **Rules:**
@@ -313,7 +317,10 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - `max_posts_per_run`
   - `posts_per_run`
   - `topics_per_run`
-  - the number of subreddits and keywords (Reddit runs one search per pair)
+  - the number of subreddits and keywords (Reddit runs one search per pair): at most 20 subreddits in Reddit's name format and 30 keywords of at most 80 characters (`RedditAgentConfig`), and Apify stops charging a Reddit search at `APIFY_REDDIT_MAX_CHARGE_USD`
+  - a Content Agent run can also trigger that Reddit search, for topic research, but only when the project has no unused relevant posts; it uses the Reddit Agent's own limits and drafts no replies
+  - keyword lookups: at most `KEYWORD_LOOKUPS_PER_RUN` (50) keywords per content run and `APIFY_KEYWORD_MAX_CHARGE_USD` per call; a topic is looked up once and never refreshed
+  - the Reddit posts sent to the topics prompt: at most 60, each body cut to 500 characters
   - `web_search_max_uses`
   - `max_tokens`
   - the drafting model: a per-agent choice (`AgentConfig.draft_model`) that changes the price of each drafting call, not the number of calls. Opus costs about 2× Sonnet per draft. The bound is an allowlist: PATCH accepts only a key that `available_draft_models(project)` returns (`apps/agents/draft_models.py`), never a model ID, and it only affects writer-tier drafting prompts
@@ -375,12 +382,7 @@ A PR must not:
 These are issues already in `main`. A branch scan does not report them again, **unless the PR makes one worse or touches the code involved without fixing it when the fix is small.** When one is fixed, delete it from this list in the same PR.
 
 ### High
-1. **Unbounded Reddit/Apify spend** (`apps/reddit/config.py:7-8`).
-   - `subreddits` and `keywords` have no count, length or format limit.
-   - Apify start URLs = subreddits × keyword queries, with at least 5 results per URL (`providers/reddit/apify.py:109`), and nothing caps total items or charge.
-   - Each run is limited only by the 15-minute actor timeout, and runs repeat through run-now or cron (Medium 4).
-2. **`RedditPost.url` scheme never validated.** It comes from Apify, is stored with `bulk_create` (which skips validators), and is rendered as `href` and returned as `open_url` for `window.open`.
-3. **Internal error text reaches the client:**
+1. **Internal error text reaches the client:**
    - `agents/runs.py` stores `traceback.format_exc()` in `AgentRun.error`, which `AgentRunSerializer` and `agent_summary.last_error` expose.
    - The same goes for the `"Failed: {exc}"` `RunEvent` (`runs.py:137`).
    - It also goes for `score_error` in the skipped-posts API (`agents/api.py:138`).
@@ -390,7 +392,7 @@ These are issues already in `main`. A branch scan does not report them again, **
 2. **Login CSRF** (`apps/core/views.py` `LoginView`). DRF exempts unauthenticated POSTs from CSRF, and `FormParser` is enabled. A cross-site form can sign a visitor into an attacker's account, and whatever the visitor then enters ends up there. It was Low while accounts were invite-only; the §1 threat model raises it.
 3. `/admin/` is reachable through the host proxy, with no IP allowlist, 2FA or separate throttle. Restrict it to the private network or a VPN, or put it behind its own auth.
 4. There's no minimum interval for agent cron; `* * * * *` is accepted (§11).
-5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7), and the seeded values skip `RedditAgentConfig` validation.
+5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7). The seeded values are filtered to the config's limits, so the spend is bounded, but no human confirms them before the first run.
 6. **No size caps on tenant text rendered into every LLM call:**
    - policy rules and `blog_disclaimer` (`apps/policy/views.py`)
    - context-doc `content_md` (`apps/context/serializers.py`)
@@ -403,12 +405,11 @@ These are issues already in `main`. A branch scan does not report them again, **
 10. Markdown renders remote images, which a model-written doc could use as a beacon. That leaks the *viewer's* IP to whoever controls the image URL.
 11. **Unvalidated input causes 500s:**
     - query params: `agents/views.py` `int(after)`, `agents/api.py` `int(min_score)` and `run_id`
-    - untyped `JSONField`s: `EditSerializer.content` and `BlogTopic.target_keywords` via `RequestTopicSerializer`
+    - untyped `JSONField`: `EditSerializer.content`
 12. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
     - skipped posts
     - policy (GET, PATCH, apply-pack)
     - context pages, revisions and regenerate
-    - topic draft
     - agent runs and run-now
 
     The code is scoped correctly today.
@@ -416,8 +417,7 @@ These are issues already in `main`. A branch scan does not report them again, **
 ### Low
 1. The base `SECRET_KEY` default is `dev-insecure-change-me`. Prod requires a real one.
 2. With LangSmith on, full prompt variables (crawled text, drafts) go to LangSmith.
-3. The number of X items and blog topics saved follows the model's output, not `posts_per_run` / `topics_per_run` (`apps/xagent/pipeline.py`, `apps/content/pipeline.py`). This is bounded by `max_tokens`.
-4. `ApifyRedditSource` doesn't URL-encode the subreddit in the search URL. The host is fixed. High 1's format check would close this.
+3. The number of X items saved follows the model's output, not `posts_per_run` (`apps/xagent/pipeline.py`). This is bounded by `max_tokens`.
 
 ### Accepted risks
 These are real issues that the operator has decided to live with for now. Scans still **flag them, at the severity given here, but fixing them is not required**, and the gate doesn't block on them. A scan reports an accepted risk when a PR touches or adds to it, and lists it under the deferred findings. The risks stay listed until they're fixed. Making one meaningfully worse is a separate, normal finding: for example, adding operator-identifying headers.

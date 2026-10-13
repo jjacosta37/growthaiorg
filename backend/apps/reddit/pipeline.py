@@ -2,6 +2,7 @@
 
 from collections import Counter
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.utils import timezone
@@ -20,7 +21,7 @@ from apps.policy.service import policy_for
 from llm import batch as llm_batch
 from llm.models import LLMBatch
 from llm.schemas import RedditComment
-from providers.reddit import ApifyRedditSource, FakeRedditSource, RedditSearch
+from providers.reddit import ApifyRedditSource, FakeRedditSource, RedditPostData, RedditSearch, RedditSource
 
 from .config import RedditAgentConfig
 from .models import RedditPost
@@ -28,12 +29,14 @@ from .models import RedditPost
 BODY_CHAR_LIMIT = 6000  # long posts are truncated for scoring/drafting (noted in the prompt input)
 
 
-def get_source():
+def get_source() -> RedditSource:
+    """The configured Reddit source: Apify in production, a fake for local dev."""
     if settings.REDDIT_SOURCE == "fake":
         return FakeRedditSource()
     if not settings.APIFY_TOKEN:
         raise RuntimeError("APIFY_TOKEN is not set (or set REDDIT_SOURCE=fake for local testing)")
-    return ApifyRedditSource(settings.APIFY_TOKEN, settings.APIFY_REDDIT_ACTOR)
+    return ApifyRedditSource(settings.APIFY_TOKEN, settings.APIFY_REDDIT_ACTOR,
+                             max_charge_usd=settings.APIFY_REDDIT_MAX_CHARGE_USD)
 
 
 def load_config(project) -> RedditAgentConfig:
@@ -43,8 +46,24 @@ def load_config(project) -> RedditAgentConfig:
 # --- Fetch + dedupe ---------------------------------------------------------------------
 
 
-def store_new_posts(project, run, posts) -> tuple[list[RedditPost], int]:
-    """Insert posts we haven't seen before. Returns (new posts, duplicates skipped)."""
+def safe_post_url(post: RedditPostData) -> str:
+    """The post's URL if it is http(s), else its Reddit permalink.
+
+    The URL comes from the provider and is rendered as a link, so a `javascript:` or `data:` URL
+    must never be stored (docs/security-patterns.md §8).
+    """
+    if urlsplit(post.url).scheme in ("http", "https"):
+        return post.url
+    return f"https://www.reddit.com/r/{post.subreddit}/comments/{post.reddit_id}/"
+
+
+def store_new_posts(project: Project, run: AgentRun, posts: list[RedditPostData],
+                    found_by: str = RedditPost.FoundBy.REDDIT) -> tuple[list[RedditPost], int]:
+    """Insert posts we haven't seen before. Returns (new posts, duplicates skipped).
+
+    Args:
+        found_by: Which flow fetched them; topic research posts are later handed to a Reddit run.
+    """
     ids = [p.reddit_id for p in posts]
     known = set(RedditPost.objects.filter(project=project, reddit_id__in=ids).values_list("reddit_id", flat=True))
     new, seen = [], set()
@@ -54,8 +73,8 @@ def store_new_posts(project, run, posts) -> tuple[list[RedditPost], int]:
         seen.add(p.reddit_id)
         new.append(RedditPost(
             project=project, reddit_id=p.reddit_id, subreddit=p.subreddit, title=p.title, body=p.body,
-            url=p.url, author=p.author, upvotes=p.upvotes, num_comments=p.num_comments, flair=p.flair,
-            posted_at=p.posted_at, first_seen_run=run,
+            url=safe_post_url(p), author=p.author, upvotes=p.upvotes, num_comments=p.num_comments, flair=p.flair,
+            posted_at=p.posted_at, first_seen_run=run, found_by=found_by,
         ))
     # ignore_conflicts guards against a concurrent run inserting the same post
     RedditPost.objects.bulk_create(new, ignore_conflicts=True)
@@ -64,10 +83,21 @@ def store_new_posts(project, run, posts) -> tuple[list[RedditPost], int]:
     return stored, len(posts) - len(stored)
 
 
-def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig) -> list[RedditPost]:
+def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, *,
+          found_by: str = RedditPost.FoundBy.REDDIT) -> list[RedditPost]:
+    """Search the configured subreddits and store the posts not seen before.
+
+    Both the Reddit Agent and the Content Agent's topic research fetch through here, so the two
+    report and cost a search the same way; `found_by` tells them apart in the trail and in Stats.
+
+    Raises:
+        RuntimeError: The search failed and returned no posts at all.
+    """
+    research = found_by == RedditPost.FoundBy.TOPIC_RESEARCH
     subs = cfg.subreddits
     preview = ", ".join(f"r/{s}" for s in subs[:2]) + (f" +{len(subs) - 2} more" if len(subs) > 2 else "")
-    reporter.step(f"Reddit Agent scanning {preview}", subreddits=subs, keywords=cfg.keywords,
+    who = "Researching topics on Reddit:" if research else "Reddit Agent scanning"
+    reporter.step(f"{who} {preview}", subreddits=subs, keywords=cfg.keywords,
                   time_window=cfg.time_window, max_posts=cfg.max_posts_per_run)
     source = get_source()
     result = source.search(RedditSearch(subreddits=subs, keywords=cfg.keywords, time_window=cfg.time_window,
@@ -75,7 +105,8 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig) -> list[
     if result.provider == "apify":
         seconds = round(result.duration_ms / 1000, 1)
         record_external(
-            run, reporter, provider="apify", purpose="reddit_search", resource_id=result.resource_id,
+            run, reporter, provider="apify", purpose="reddit_topic_research" if research else "reddit_search",
+            resource_id=result.resource_id,
             external_run_id=result.external_run_id, status=result.status, items=len(result.posts),
             cost_usd=result.cost_usd, duration_ms=result.duration_ms, error=result.error,
             message=f"Searched {result.queries} quer{'y' if result.queries == 1 else 'ies'} in {seconds}s: "
@@ -86,7 +117,7 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig) -> list[
         raise RuntimeError(f"Reddit search failed: {result.error}")
     if result.error and result.provider != "apify":
         reporter.warning(f"Reddit search had a problem (continuing with {len(result.posts)} posts): {result.error}")
-    new, dupes = store_new_posts(run.project, run, result.posts)
+    new, dupes = store_new_posts(run.project, run, result.posts, found_by)
     run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes)
     run.save(update_fields=["stats"])
     # Counted here rather than in the adapter: which subreddits produced nothing is the fact
@@ -278,26 +309,78 @@ def draft_replies(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, 
 # --- Entry points -----------------------------------------------------------------------
 
 
+def research_posts(run: AgentRun, reporter: RunReporter) -> list[RedditPost]:
+    """Fetch and score fresh posts for the Content Agent's topic research. Drafts no replies.
+
+    The posts are stored as found by topic research, so the next Reddit run takes over the
+    reply-worthy ones (`take_over_research_posts`). Scoring is synchronous: the content run
+    needs the scores before it can propose topics.
+
+    Returns:
+        The new posts, scored. Empty when Reddit isn't configured or nothing new was found.
+
+    Raises:
+        RuntimeError: The search failed and returned no posts at all.
+    """
+    cfg = load_config(run.project)
+    if not cfg.subreddits or not cfg.keywords:
+        return []
+    posts = fetch(run, reporter, cfg, found_by=RedditPost.FoundBy.TOPIC_RESEARCH)
+    if posts:
+        score_sync(run, reporter, posts)
+    return posts
+
+
+def take_over_research_posts(run: AgentRun, reporter: RunReporter) -> list[RedditPost]:
+    """Claim the posts topic research scored since the last Reddit run, so they get replies too.
+
+    Each post is claimed once (`handoff_run`), and only once its scoring has finished. Both the
+    sync and the batch path call this before drafting, so neither leaves them behind.
+    """
+    claimable = RedditPost.objects.filter(
+        project=run.project, found_by=RedditPost.FoundBy.TOPIC_RESEARCH, handoff_run__isnull=True,
+    ).exclude(score_status=RedditPost.ScoreStatus.PENDING)
+    ids = list(claimable.values_list("pk", flat=True))
+    RedditPost.objects.filter(pk__in=ids, handoff_run__isnull=True).update(handoff_run=run)
+    posts = list(RedditPost.objects.filter(pk__in=ids, handoff_run=run))
+    if posts:
+        run.stats["carried_over"] = len(posts)
+        run.save(update_fields=["stats"])
+        reporter.event(f"Took over {len(posts)} post(s) found by topic research", carried_over=len(posts),
+                       reddit_ids=[p.reddit_id for p in posts])
+    return posts
+
+
 def run_reddit_agent(run: AgentRun, reporter: RunReporter) -> None:
+    """Fetch, score (in a batch for scheduled runs), then draft replies, including for posts
+    topic research found since the last run.
+
+    Raises:
+        ValueError: The Reddit Agent has no subreddits or keywords.
+    """
     cfg = load_config(run.project)
     if not cfg.subreddits or not cfg.keywords:
         raise ValueError("Add at least one subreddit and one keyword to the Reddit Agent config")
     posts = fetch(run, reporter, cfg)
-    if not posts:
-        reporter.success("No new posts since the last scan")
-        return
-    if run.trigger == AgentRun.Trigger.SCHEDULED and cfg.batch_scheduled_scoring:
+    if posts and run.trigger == AgentRun.Trigger.SCHEDULED and cfg.batch_scheduled_scoring:
         submit_scoring_batch(run, reporter, posts)
         return
-    score_sync(run, reporter, posts)
-    draft_replies(run, reporter, cfg, posts)
+    if posts:
+        score_sync(run, reporter, posts)
+    carried = take_over_research_posts(run, reporter)
+    if not posts and not carried:
+        reporter.success("No new posts since the last scan")
+        return
+    draft_replies(run, reporter, cfg, posts + carried)
 
 
 def finish_batch_run(run: AgentRun, reporter: RunReporter) -> None:
+    """Apply a finished scoring batch, then draft replies as the sync path does."""
     b = LLMBatch.objects.get(pk=run.params["batch_id"])
     reporter.step("Collecting batch scores")
     posts = apply_batch_results(run, reporter, b)
-    draft_replies(run, reporter, load_config(run.project), posts)
+    carried = take_over_research_posts(run, reporter)
+    draft_replies(run, reporter, load_config(run.project), posts + carried)
 
 
 def batch_expired(run: AgentRun) -> bool:

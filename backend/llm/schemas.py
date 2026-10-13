@@ -103,11 +103,19 @@ class ComplianceLint(BaseModel):
 
 
 class TopicProposal(BaseModel):
+    """One proposed blog topic. When it answers audience posts, list every post it answers."""
+
     title: str = Field(description="Working title of the article.")
     angle: str = Field(description="One or two sentences: the specific take and what the reader will learn.")
-    target_keywords: list[str] = Field(description="2-5 search keywords (hypotheses; no volumes).")
+    target_keywords: list[str] = Field(
+        description="2-5 search phrases a reader would type to find this article, most important first. "
+                    "Each under 80 characters and 10 words.")
     pillar: str = Field(description="Which Content Strategy pillar this belongs to.")
     why: str = Field(description="One line: why this topic, now, for this audience.")
+    evidence_post_ids: list[int] = Field(
+        default_factory=list,
+        description="The ids of the audience posts this topic answers. Each post id belongs to at most one topic. "
+                    "Empty when the topic doesn't come from the posts.")
 
 
 @register

@@ -9,6 +9,11 @@ from .base import *  # noqa: E402, F403
 
 SECRET_KEY = "test"
 ANTHROPIC_API_KEY = "test-key"
+# Tests must never spend real Apify credit: a developer's .env carries a real token, and the
+# Reddit and keyword providers default to Apify. Tests that need a provider install a fake.
+APIFY_TOKEN = ""
+REDDIT_SOURCE = "fake"
+KEYWORD_SOURCE = "fake"
 LANGSMITH_TRACING = False
 
 # Tests must never reach LangSmith. A developer's .env commonly has LANGSMITH_TRACING=true,

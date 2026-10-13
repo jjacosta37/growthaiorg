@@ -1,7 +1,7 @@
 ---
 id: 0001
 title: Evidence-backed blog topics
-status: agreed
+status: building
 created: 2026-10-13
 agreed: 2026-10-13
 branch: feat/evidence-backed-topics

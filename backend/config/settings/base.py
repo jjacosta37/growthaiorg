@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 
 import environ
@@ -196,6 +197,15 @@ APIFY_RENDER_ACTOR = env("APIFY_RENDER_ACTOR", default="apify/website-content-cr
 # Reddit Agent
 REDDIT_SOURCE = env("REDDIT_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)
 APIFY_REDDIT_ACTOR = env("APIFY_REDDIT_ACTOR", default="harshmaur/reddit-scraper")
+# Apify stops charging a Reddit search at this amount (the actor charges per result).
+APIFY_REDDIT_MAX_CHARGE_USD = Decimal(env("APIFY_REDDIT_MAX_CHARGE_USD", default="1.00"))
+
+# Keyword search data for the Content Agent's topics
+KEYWORD_SOURCE = env("KEYWORD_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)
+APIFY_KEYWORD_ACTOR = env("APIFY_KEYWORD_ACTOR", default="keywordlab/keyword-search-volume")
+KEYWORD_LOOKUPS_PER_RUN = 50
+# $0.02 per run + $0.006 per keyword with data, so 50 keywords cost at most about $0.32.
+APIFY_KEYWORD_MAX_CHARGE_USD = Decimal(env("APIFY_KEYWORD_MAX_CHARGE_USD", default="0.50"))
 LLM_BATCH_POLL_SECONDS = env.int("LLM_BATCH_POLL_SECONDS", default=120)
 # Feedback is folded into the learnings digest this long after it arrives, so a burst costs one call.
 FEEDBACK_DIGEST_DELAY_SECONDS = env.int("FEEDBACK_DIGEST_DELAY_SECONDS", default=60)

@@ -58,7 +58,8 @@ class FakeApify:
         fake = self
 
         class A:
-            def call(self, run_input, run_timeout, max_total_charge_usd=None):
+            def call(self, run_input, run_timeout, max_total_charge_usd=None, max_items=None):
+                fake.limits = (max_total_charge_usd, max_items)
                 fake.inputs.append(run_input)
                 if fake.error:
                     raise fake.error
@@ -103,3 +104,10 @@ def test_search_failures():
     assert "FAILED" in r.error and len(r.posts) == 1
     empty = ApifyRedditSource("tok", client=FakeApify([])).search(RedditSearch(subreddits=[], keywords=["b"]))
     assert empty.posts == []
+
+
+def test_search_passes_both_spend_caps():
+    client = FakeApify([item("a", None)])
+    ApifyRedditSource("tok", client=client, max_charge_usd=Decimal("1.00"), max_items=500).search(
+        RedditSearch(subreddits=["s"], keywords=["k"]))
+    assert client.limits == (Decimal("1.00"), 500)

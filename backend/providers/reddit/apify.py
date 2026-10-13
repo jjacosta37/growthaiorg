@@ -95,7 +95,7 @@ class ApifyRedditSource:
     name = "apify"
 
     def __init__(self, token: str, actor_id: str = "harshmaur/reddit-scraper", *, timeout_minutes: int = 15,
-                 max_charge_usd: Decimal | None = None, client: Any = None):
+                 max_charge_usd: Decimal | None = None, max_items: int | None = None, client: Any = None):
         if client is None:
             from apify_client import ApifyClient
 
@@ -105,6 +105,8 @@ class ApifyRedditSource:
         self.timeout = timedelta(minutes=timeout_minutes)
         # Apify stops charging at this amount, so a run's spend is bounded whatever the config holds.
         self.max_charge_usd = max_charge_usd
+        # A pay-per-result actor ignores the charge cap; the item cap bounds what it can charge.
+        self.max_items = max_items
 
     def build_input(self, query: RedditSearch) -> dict:
         urls = search_urls(query)
@@ -142,7 +144,8 @@ class ApifyRedditSource:
         started = time.monotonic()
         try:
             run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout,
-                                                        max_total_charge_usd=self.max_charge_usd)
+                                                        max_total_charge_usd=self.max_charge_usd,
+                                                        max_items=self.max_items)
         except Exception as exc:  # network/auth/actor failure: surface it on the run
             result.duration_ms = int((time.monotonic() - started) * 1000)
             log.warning("apify reddit search failed: %s", exc, exc_info=True)

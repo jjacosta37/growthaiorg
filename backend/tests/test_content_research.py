@@ -536,3 +536,20 @@ def test_posted_at_fallback_uses_fetch_time(project):
     assert [x.reddit_id for x in relevant_posts(project, 70)] == ["nodate"]
     RedditPost.objects.filter(pk=p.pk).update(fetched_at=datetime.now(UTC) - timedelta(days=31))
     assert relevant_posts(project, 70) == []
+
+
+def test_unsafe_urls_already_stored_never_reach_the_browser(client, project):
+    from apps.inbox.models import DraftVersion
+
+    p = stored_post(project, "old", 90)
+    RedditPost.objects.filter(pk=p.pk).update(url="javascript:alert(1)")
+    draft = Draft.objects.create(project=project, agent_type="reddit", kind="reddit_comment", source_reddit_post=p)
+    draft.current_version = DraftVersion.objects.create(draft=draft, n=1, source="ai_initial", content={"body": "b"})
+    draft.save(update_fields=["current_version"])
+
+    detail = client.get(f"/api/drafts/{draft.pk}/").json()
+    assert detail["open_url"] == ""
+    assert detail["source_post"]["url"] == ""
+    other = stored_post(project, "skipped", 50)
+    RedditPost.objects.filter(pk=other.pk).update(url="data:text/html,x")
+    assert {r["url"] for r in client.get("/api/agents/reddit/skipped/").json()["results"]} == {""}

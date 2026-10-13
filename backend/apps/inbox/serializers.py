@@ -2,6 +2,8 @@ from urllib.parse import urlencode
 
 from rest_framework import serializers
 
+from apps.core.text import http_url
+
 from .content import as_text
 from .models import Draft, DraftVersion
 from .nudges import NUDGES
@@ -51,13 +53,17 @@ class RedditSourceSerializer(serializers.Serializer):
     subreddit = serializers.CharField()
     title = serializers.CharField()
     body = serializers.CharField()
-    url = serializers.URLField()
+    url = serializers.SerializerMethodField()
     author = serializers.CharField()
     upvotes = serializers.IntegerField()
     num_comments = serializers.IntegerField()
     posted_at = serializers.DateTimeField()
     relevance_score = serializers.IntegerField()
     relevance_reason = serializers.CharField()
+
+    def get_url(self, obj) -> str:
+        """The post's link, or "" if it isn't http(s)."""
+        return http_url(obj.url)
 
 
 class BlogTopicSummarySerializer(serializers.Serializer):
@@ -91,7 +97,7 @@ class DraftDetailSerializer(DraftListSerializer):
     def get_open_url(self, obj) -> str:
         """Where "Copy & open" sends me."""
         if obj.kind == "reddit_comment" and obj.source_reddit_post:
-            return obj.source_reddit_post.url
+            return http_url(obj.source_reddit_post.url)
         if obj.kind in ("x_post", "x_thread"):
             first = obj.current_version.content["posts"][0]
             return f"https://x.com/intent/post?{urlencode({'text': first})}"

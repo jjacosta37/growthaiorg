@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from apps.core.errors import validation_errors
 from apps.core.models import Project
 from apps.core.selection import current_project
+from apps.core.text import http_url
 
 from . import registry
 from .draft_models import available_draft_models, draft_model_options, effective_draft_key
@@ -139,7 +140,7 @@ class SkippedPostSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     subreddit = serializers.CharField()
     title = serializers.CharField()
-    url = serializers.URLField()
+    url = serializers.SerializerMethodField()
     upvotes = serializers.IntegerField()
     num_comments = serializers.IntegerField()
     posted_at = serializers.DateTimeField()
@@ -149,6 +150,11 @@ class SkippedPostSerializer(serializers.Serializer):
     reply_worthwhile = serializers.BooleanField(allow_null=True)
     score_error = serializers.CharField()
     fetched_at = serializers.DateTimeField()
+
+
+    def get_url(self, obj) -> str:
+        """The post's link, or "" if it isn't http(s)."""
+        return http_url(obj.url)
 
 
 class RedditSkippedView(generics.ListAPIView):

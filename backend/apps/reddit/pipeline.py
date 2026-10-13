@@ -36,7 +36,8 @@ def get_source() -> RedditSource:
     if not settings.APIFY_TOKEN:
         raise RuntimeError("APIFY_TOKEN is not set (or set REDDIT_SOURCE=fake for local testing)")
     return ApifyRedditSource(settings.APIFY_TOKEN, settings.APIFY_REDDIT_ACTOR,
-                             max_charge_usd=settings.APIFY_REDDIT_MAX_CHARGE_USD)
+                             max_charge_usd=settings.APIFY_REDDIT_MAX_CHARGE_USD,
+                             max_items=settings.APIFY_REDDIT_MAX_ITEMS)
 
 
 def load_config(project) -> RedditAgentConfig:

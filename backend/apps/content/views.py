@@ -1,5 +1,3 @@
-from urllib.parse import urlsplit
-
 from django.db import transaction
 from django.db.models import F, Prefetch, QuerySet
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -14,6 +12,7 @@ from apps.agents.runs import RunConflict, create_run
 from apps.agents.serializers import AgentRunSerializer
 from apps.agents.tasks import run_agent_task
 from apps.core.selection import current_project
+from apps.core.text import http_url
 from apps.reddit.models import RedditPost
 
 from .models import BlogTopic
@@ -38,7 +37,7 @@ class EvidencePostSerializer(serializers.Serializer):
 
     def get_url(self, obj: RedditPost) -> str:
         """The post's link, or "" if it isn't http(s)."""
-        return obj.url if urlsplit(obj.url).scheme in ("http", "https") else ""
+        return http_url(obj.url)
 
 
 class BlogTopicSerializer(serializers.ModelSerializer):

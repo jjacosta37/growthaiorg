@@ -298,7 +298,7 @@ These are banned in application code (not tests or migrations). `test_security_p
 - **`RunEvent.data`** is ids, counts, scores, durations and costs only, never crawled text, draft bodies or post bodies. The UI shows it.
 - **Third parties that receive content**, and are allowed to:
   - **Anthropic:** prompts
-  - **Apify:** same-site URLs and Reddit search terms
+  - **Apify:** same-site URLs and Reddit search terms; topic keywords and the titles of topics a user requests, sent to the keyword actor, whose operator and data provider (DataForSEO) also see them
   - **LangSmith:** prompt inputs and outputs, only when `LANGSMITH_TRACING` is on
   - **Sentry:** identifiers only
   - **An egress proxy or relay, if one is added later (§6):** the URLs the crawler fetches and the responses that come back
@@ -317,8 +317,8 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - `max_posts_per_run`
   - `posts_per_run`
   - `topics_per_run`
-  - the number of subreddits and keywords (Reddit runs one search per pair): at most 20 subreddits in Reddit's name format and 30 keywords of at most 80 characters (`RedditAgentConfig`), and Apify stops charging a Reddit search at `APIFY_REDDIT_MAX_CHARGE_USD`
-  - a Content Agent run can also trigger that Reddit search, for topic research, but only when the project has no unused relevant posts; it uses the Reddit Agent's own limits and drafts no replies
+  - the number of subreddits and keywords (Reddit runs one search per pair): at most 20 subreddits in Reddit's name format and 30 keywords of at most 80 characters (`RedditAgentConfig`), and one Reddit search is capped at `APIFY_REDDIT_MAX_ITEMS` results (pay-per-result) and `APIFY_REDDIT_MAX_CHARGE_USD` (pay-per-event)
+  - a Content Agent run can also trigger that Reddit search, for topic research, but only when the project has no unused relevant posts; it uses the Reddit Agent's own limits and drafts no replies. Until agent cron has a minimum interval (§14 Medium 4), the Content Agent's schedule multiplies this Apify and scoring spend too
   - keyword lookups: at most `KEYWORD_LOOKUPS_PER_RUN` (50) keywords per content run and `APIFY_KEYWORD_MAX_CHARGE_USD` per call; a topic is looked up once and never refreshed
   - the Reddit posts sent to the topics prompt: at most 60, each body cut to 500 characters
   - `web_search_max_uses`
@@ -391,7 +391,7 @@ These are issues already in `main`. A branch scan does not report them again, **
 1. The login view has no throttle or lockout, and `AUTH_PASSWORD_VALIDATORS` isn't set. With a public login page this is the first thing to fix after the Criticals and Highs.
 2. **Login CSRF** (`apps/core/views.py` `LoginView`). DRF exempts unauthenticated POSTs from CSRF, and `FormParser` is enabled. A cross-site form can sign a visitor into an attacker's account, and whatever the visitor then enters ends up there. It was Low while accounts were invite-only; the §1 threat model raises it.
 3. `/admin/` is reachable through the host proxy, with no IP allowlist, 2FA or separate throttle. Restrict it to the private network or a VPN, or put it behind its own auth.
-4. There's no minimum interval for agent cron; `* * * * *` is accepted (§11).
+4. There's no minimum interval for agent cron; `* * * * *` is accepted (§11). Since topic research, a frequent Content Agent schedule with Reddit targets that never yield relevant posts also repeats a Reddit search, its scoring and a keyword lookup on every run.
 5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7). The seeded values are filtered to the config's limits, so the spend is bounded, but no human confirms them before the first run.
 6. **No size caps on tenant text rendered into every LLM call:**
    - policy rules and `blog_disclaimer` (`apps/policy/views.py`)

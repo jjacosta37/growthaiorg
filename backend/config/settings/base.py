@@ -197,8 +197,10 @@ APIFY_RENDER_ACTOR = env("APIFY_RENDER_ACTOR", default="apify/website-content-cr
 # Reddit Agent
 REDDIT_SOURCE = env("REDDIT_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)
 APIFY_REDDIT_ACTOR = env("APIFY_REDDIT_ACTOR", default="harshmaur/reddit-scraper")
-# Apify stops charging a Reddit search at this amount (the actor charges per result).
+# Bounds on one Reddit search. The charge cap applies to pay-per-event actors, the item cap to
+# pay-per-result ones (about $2 per 1,000 results), so a search is bounded under either model.
 APIFY_REDDIT_MAX_CHARGE_USD = Decimal(env("APIFY_REDDIT_MAX_CHARGE_USD", default="1.00"))
+APIFY_REDDIT_MAX_ITEMS = env.int("APIFY_REDDIT_MAX_ITEMS", default=500)
 
 # Keyword search data for the Content Agent's topics
 KEYWORD_SOURCE = env("KEYWORD_SOURCE", default="apify")  # "apify" | "fake" (local testing, no Apify spend)

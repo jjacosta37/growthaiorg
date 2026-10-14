@@ -51,6 +51,15 @@ Complex features start with `/prd`: product questions, then a short PRD in `docs
 
 After a feature merges, `/feature-doc <feature>` records it in `docs/features/`: how it behaves, why it was built that way, and how it works in the code, checked against the code (`docs/features/README.md` has the template). When a later change alters a documented feature, update its doc in the same way rather than adding a new one.
 
+## Backlog
+
+`docs/backlog.md` lists work deferred for later. Each item records the problem, why it was left and the options already considered, so it can be picked up without redoing the analysis.
+
+- **Add an item in the PR that defers it:** a finding the user accepts for now, a follow-up a PR leaves, a limitation chosen deliberately. Ask the user before adding one; deferring is their call.
+- **Check it before planning** work in an area, and mention any item the work could solve or would affect.
+- **Remove an item in the PR that solves it.**
+- **Security items stay in `docs/security-patterns.md` §14**, which keeps their severity. The backlog item adds the product context and links to it.
+
 ## Python code standards
 
 These apply to all new code and to every function or class a change modifies, in `backend/` outside `tests/` and `migrations/`. Code that isn't touched is left as it is: don't reformat a file you didn't otherwise need to change.

@@ -1,10 +1,10 @@
 ---
 id: 0002
 title: Blog posts as GitHub pull requests
-status: draft
+status: agreed
 created: 2026-10-14
-agreed:
-branch:
+agreed: 2026-10-14
+branch: claude/dazzling-cori-qcr5gf
 ---
 # Blog posts as GitHub pull requests
 

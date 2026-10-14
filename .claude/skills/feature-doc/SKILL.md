@@ -67,7 +67,7 @@ Don't change the PRD's status here. It moves to `shipped` when the PR merges (CL
 ### 7. Store, on the feature branch
 1. Stay on the feature's branch. If the working tree has changes unrelated to the feature, ask before committing.
 2. Commit the doc and the index row. Use the message `Document <feature name>` (or `Update the <feature name> doc`), ending with the commit attribution lines from the system reminder. **During review**, when the doc changes because the code did, commit them together, in one commit.
-3. Run `/security-scan`, as CLAUDE.md requires before every push. A doc-only commit on top of a scanned commit has no code changes; scan with `--base <last scanned commit>`.
+3. Run `/security-scan`, as CLAUDE.md requires before every push. A doc-only commit on top of a scanned commit has no code changes, so it can be scanned with `--base <scanned commit>`. Take that commit from the gate's marker, `cat "$(git rev-parse --git-path luka-security-scan)"`, never from memory or a PR description, and use it only if `git merge-base --is-ancestor <sha> HEAD` succeeds and `git diff --name-only <sha>` lists only `docs/` files. Otherwise run a full scan. In the PR description, keep the full-branch `## Security scan` section and add a line for the doc commit; don't replace it.
 4. Then:
    - **No PR yet** (the normal case): push and open the feature's PR. Its description links the doc as the place to start the review, then lists the ACs and includes the scan's `## Security scan` section. Add the new PR number to the doc's `prs:` in a follow-up commit only if it's missing.
    - **The PR is already open:** push, and update the PR description if the doc link or the scan section is now out of date.

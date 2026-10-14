@@ -2,12 +2,18 @@
 what already exists, but they still repeat themselves, so this backs that up."""
 
 import re
+from urllib.parse import urlsplit
 
 STOPWORDS = {
     "a", "an", "the", "and", "or", "of", "to", "for", "in", "on", "with", "your", "you", "how", "what", "why",
     "is", "are", "do", "does", "vs", "versus", "guide", "explained", "complete", "should", "can", "it", "its",
     "when", "which", "every", "strategies", "strategy", "benefits", "real", "world", "tips", "ways",
 }
+
+
+def http_url(url: str) -> str:
+    """`url` if it is http(s), else "". For provider URLs rendered as links (docs/security-patterns.md §8)."""
+    return url if urlsplit(url or "").scheme in ("http", "https") else ""
 
 
 def slugify(text: str, max_len: int = 80) -> str:

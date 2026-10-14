@@ -156,13 +156,75 @@ export interface RedditConfig {
   guidance: string;
 }
 
+export type OpportunityWeight = "off" | "low" | "medium" | "high";
+
+export interface OpportunityWeights {
+  volume: OpportunityWeight;
+  ease: OpportunityWeight;
+  reddit: OpportunityWeight;
+}
+
 export interface ContentConfig {
   topics_per_run: number;
   drafts_per_run: number;
   min_backlog: number;
   target_words: number;
   guidance: string;
+  search_country: string;
+  search_language: string;
+  weights: OpportunityWeights;
 }
+
+/** The search markets keyword data can be looked up in, with each one's main language.
+ *  Mirrors `MARKETS` in backend/providers/keywords/base.py, which validates them. */
+export const SEARCH_MARKETS: { code: string; label: string; language: string }[] = [
+  { code: "US", label: "United States", language: "en" },
+  { code: "GB", label: "United Kingdom", language: "en" },
+  { code: "CA", label: "Canada", language: "en" },
+  { code: "AU", label: "Australia", language: "en" },
+  { code: "NZ", label: "New Zealand", language: "en" },
+  { code: "IE", label: "Ireland", language: "en" },
+  { code: "IN", label: "India", language: "en" },
+  { code: "SG", label: "Singapore", language: "en" },
+  { code: "ZA", label: "South Africa", language: "en" },
+  { code: "DE", label: "Germany", language: "de" },
+  { code: "AT", label: "Austria", language: "de" },
+  { code: "CH", label: "Switzerland", language: "de" },
+  { code: "FR", label: "France", language: "fr" },
+  { code: "BE", label: "Belgium", language: "nl" },
+  { code: "NL", label: "Netherlands", language: "nl" },
+  { code: "ES", label: "Spain", language: "es" },
+  { code: "MX", label: "Mexico", language: "es" },
+  { code: "IT", label: "Italy", language: "it" },
+  { code: "PT", label: "Portugal", language: "pt" },
+  { code: "BR", label: "Brazil", language: "pt" },
+  { code: "PL", label: "Poland", language: "pl" },
+  { code: "SE", label: "Sweden", language: "sv" },
+  { code: "DK", label: "Denmark", language: "da" },
+  { code: "FI", label: "Finland", language: "fi" },
+  { code: "CZ", label: "Czechia", language: "cs" },
+  { code: "UA", label: "Ukraine", language: "uk" },
+  { code: "TR", label: "Turkey", language: "tr" },
+  { code: "JP", label: "Japan", language: "ja" },
+];
+
+export const SEARCH_LANGUAGES: { code: string; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "de", label: "German" },
+  { code: "fr", label: "French" },
+  { code: "nl", label: "Dutch" },
+  { code: "es", label: "Spanish" },
+  { code: "it", label: "Italian" },
+  { code: "pt", label: "Portuguese" },
+  { code: "pl", label: "Polish" },
+  { code: "sv", label: "Swedish" },
+  { code: "da", label: "Danish" },
+  { code: "fi", label: "Finnish" },
+  { code: "cs", label: "Czech" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "tr", label: "Turkish" },
+  { code: "ja", label: "Japanese" },
+];
 
 export const X_FORMATS = [
   "insight",
@@ -420,6 +482,16 @@ export interface PolicyPack {
 
 /* ----------------------------------------------------------------- topics */
 
+export interface EvidencePost {
+  id: number;
+  subreddit: string;
+  title: string;
+  /** Always http(s), or "" when the stored URL wasn't safe to link. */
+  url: string;
+}
+
+export type TopicSort = "opportunity" | "volume" | "difficulty" | "evidence" | "newest";
+
 export interface BlogTopic {
   id: number;
   title: string;
@@ -431,6 +503,15 @@ export interface BlogTopic {
   requested_by_user: boolean;
   draft_id: number | null;
   created_at: string;
+  evidence: EvidencePost[];
+  evidence_count: number;
+  search_status: "pending" | "ready";
+  primary_keyword: string;
+  search_volume: number | null;
+  keyword_difficulty: number | null;
+  /** "US/en": the market the search data was looked up in. */
+  search_market: string;
+  low_volume: boolean;
 }
 
 /* ------------------------------------------------------------------ stats */

@@ -10,9 +10,11 @@ import math
 import time
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 from urllib.parse import urlencode
 
 from llm.tracing import trace_tool
+from providers.apify_runs import settled_run
 
 from .base import RedditPostData, RedditSearch, RedditSearchResult
 
@@ -88,10 +90,12 @@ def map_item(item: dict) -> RedditPostData | None:
 
 
 class ApifyRedditSource:
+    """RedditSource that runs the Reddit actor once per search, covering every subreddit."""
+
     name = "apify"
 
     def __init__(self, token: str, actor_id: str = "harshmaur/reddit-scraper", *, timeout_minutes: int = 15,
-                 client=None):
+                 max_charge_usd: Decimal | None = None, max_items: int | None = None, client: Any = None):
         if client is None:
             from apify_client import ApifyClient
 
@@ -99,6 +103,10 @@ class ApifyRedditSource:
         self.client = client
         self.actor_id = actor_id
         self.timeout = timedelta(minutes=timeout_minutes)
+        # Apify stops charging at this amount, so a run's spend is bounded whatever the config holds.
+        self.max_charge_usd = max_charge_usd
+        # A pay-per-result actor ignores the charge cap; the item cap bounds what it can charge.
+        self.max_items = max_items
 
     def build_input(self, query: RedditSearch) -> dict:
         urls = search_urls(query)
@@ -135,7 +143,9 @@ class ApifyRedditSource:
         error string so the pipeline can carry on (or stop) with the facts in hand."""
         started = time.monotonic()
         try:
-            run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout)
+            run = self.client.actor(self.actor_id).call(run_input=run_input, run_timeout=self.timeout,
+                                                        max_total_charge_usd=self.max_charge_usd,
+                                                        max_items=self.max_items)
         except Exception as exc:  # network/auth/actor failure: surface it on the run
             result.duration_ms = int((time.monotonic() - started) * 1000)
             log.warning("apify reddit search failed: %s", exc, exc_info=True)
@@ -148,6 +158,7 @@ class ApifyRedditSource:
             return
         result.external_run_id = run.id or ""
         result.status = run.status or ""
+        run = settled_run(self.client, run)
         result.cost_usd = Decimal(str(run.usage_total_usd or 0))
         if run.status != "SUCCEEDED":
             result.error = f"Apify run {run.id} ended with status {run.status}"

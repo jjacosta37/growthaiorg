@@ -20,6 +20,7 @@ import type {
   AgentType,
   BlogTopic,
   BlogTopicStatus,
+  TopicSort,
   ContentPolicy,
   ContextDoc,
   CrawledPage,
@@ -58,7 +59,8 @@ export const keys = {
   agentRuns: (type: AgentType) => ["agents", type, "runs"] as const,
   learnings: (type: AgentType) => ["agents", type, "learnings"] as const,
   skipped: (minScore?: number) => ["agents", "reddit", "skipped", minScore ?? null] as const,
-  topics: (status?: BlogTopicStatus) => ["topics", status ?? "all"] as const,
+  topics: (status?: BlogTopicStatus, sort?: TopicSort) =>
+    ["topics", status ?? "all", sort ?? "opportunity"] as const,
   drafts: (filters: DraftFilters) => ["drafts", filters] as const,
   draft: (id: number) => ["drafts", id] as const,
   counts: ["inbox", "counts"] as const,
@@ -274,6 +276,8 @@ export function useUpdateAgent<T extends AgentType>(type: T) {
     onSuccess: (agent) => {
       qc.setQueryData(keys.agent(type), agent);
       void qc.invalidateQueries({ queryKey: keys.agents });
+      // The backlog's default order follows the Content Agent's opportunity weights.
+      if (type === "content") invalidateTopics(qc);
     },
   });
 }
@@ -307,10 +311,10 @@ export function useSkippedPosts(minScore?: number) {
 
 /* ---------------------------------------------------------------- topics */
 
-export function useTopics(status?: BlogTopicStatus) {
+export function useTopics(status?: BlogTopicStatus, sort?: TopicSort) {
   return useQuery({
-    queryKey: keys.topics(status),
-    queryFn: () => api.page<BlogTopic>("/agents/content/topics/", { status, limit: 50 }),
+    queryKey: keys.topics(status, sort),
+    queryFn: () => api.page<BlogTopic>("/agents/content/topics/", { status, sort, limit: 50 }),
   });
 }
 

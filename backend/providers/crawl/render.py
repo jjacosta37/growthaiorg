@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Protocol
 
 from llm.tracing import trace_tool
+from providers.apify_runs import settled_run
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +99,7 @@ class ApifyRenderer:
             return
         result.external_run_id = run.id or ""
         result.status = run.status or ""
+        run = settled_run(self.client, run)
         result.cost_usd = Decimal(str(run.usage_total_usd or 0))
         if run.status != "SUCCEEDED":
             result.error = f"Apify run {run.id} ended with status {run.status}"

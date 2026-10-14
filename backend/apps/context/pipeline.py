@@ -19,6 +19,7 @@ from apps.core.models import Project
 from apps.policy.models import ContentPolicy
 from apps.policy.packs import all_packs, get_pack
 from apps.policy.service import apply_pack, policy_for, render_compliance_doc
+from apps.reddit.config import MAX_KEYWORD_CHARS, MAX_KEYWORDS, MAX_SUBREDDITS, SUBREDDIT_NAME
 from providers.crawl import ApifyRenderer, crawl_site
 from providers.crawl.urls import normalize
 
@@ -175,7 +176,7 @@ def update_project_facts(project, run: AgentRun) -> None:
     project.save(update_fields=["product_summary", "competitors"])
 
 
-def suggest_reddit_targets(project, run: AgentRun, reporter: RunReporter) -> None:
+def suggest_reddit_targets(project: Project, run: AgentRun, reporter: RunReporter) -> None:
     """Suggest subreddits and keywords. Applied to the Reddit Agent config only if it's still empty."""
     docs = {d.kind: d.content_md for d in ordered_documents(project)}
     result = llm.complete(
@@ -189,8 +190,12 @@ def suggest_reddit_targets(project, run: AgentRun, reporter: RunReporter) -> Non
         run=run,
     )
     s = result.parsed
-    subreddits = list(dict.fromkeys(n.name.strip().removeprefix("r/").strip("/") for n in s.subreddits))
-    keywords = list(dict.fromkeys(k.strip() for k in s.keywords if k.strip()))
+    # Model output: keep only what the config would accept, so a seeded config is as bounded as
+    # one the user typed (docs/security-patterns.md §7).
+    names = dict.fromkeys(n.name.strip().removeprefix("r/").strip("/") for n in s.subreddits)
+    subreddits = [n for n in names if SUBREDDIT_NAME.match(n)][:MAX_SUBREDDITS]
+    keywords = [k for k in dict.fromkeys(" ".join(k.split()) for k in s.keywords if k.strip())
+                if len(k) <= MAX_KEYWORD_CHARS][:MAX_KEYWORDS]
     suggestion = {
         "subreddits": subreddits,
         "keywords": keywords,

@@ -1,8 +1,6 @@
 import json
 
 import pytest
-from django.contrib.auth import get_user_model
-from rest_framework.test import APIClient
 
 from apps.agents.models import AgentConfig, AgentRun
 from apps.agents.runs import create_run
@@ -10,10 +8,10 @@ from apps.agents.tasks import run_agent_task
 from apps.content.models import BlogTopic
 from apps.content.pipeline import finalize_post
 from apps.context.models import CrawledPage
-from apps.core.models import Project
 from apps.core.text import is_near_duplicate, slugify
 from apps.inbox.models import Draft
 from llm.schemas import BlogPostDraft
+from providers.keywords import FakeKeywordSource, KeywordMetrics
 from tests.fakes import message, schema_title
 
 pytestmark = pytest.mark.django_db
@@ -99,14 +97,19 @@ def test_finalize_post_cleans_slug_h1_and_adds_disclaimer():
     assert finalize_post(parsed, "")["body_md"].rstrip().endswith("Hello.")  # packs without a disclaimer
 
 
-def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic):
+def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic, monkeypatch):
     BlogTopic.objects.create(project=project, title="Onboarding checklists", status="rejected")
+    source = FakeKeywordSource({"sprint retrospective": KeywordMetrics(2000, 20),
+                                "weekly standup": KeywordMetrics(300, 40)})
+    monkeypatch.setattr("apps.content.keywords.get_keyword_source", lambda: source)
     fake = fake_anthropic(responder=responder())
 
     run = run_content(project)
 
     assert run.status == "succeeded", run.error or run.stats
-    assert run.stats == {"topics_proposed": 2, "topics_duplicate": 2, "drafted": 1}
+    assert {k: run.stats[k] for k in ("topics_proposed", "topics_duplicate", "drafted")} == {
+        "topics_proposed": 2, "topics_duplicate": 2, "drafted": 1}
+    assert run.stats["no_evidence_reason"] == "reddit_not_configured"
     topics = {t.title: t.status for t in BlogTopic.objects.exclude(status="rejected")}
     assert topics == {"Running Retrospectives, Step by Step": "drafted",
                       "What a Weekly Standup Is Really For": "proposed"}
@@ -119,7 +122,9 @@ def test_run_proposes_dedupes_and_drafts_top_topic(project, fake_anthropic):
     assert (draft.kind, draft.agent_type, draft.blog_topic.title) == (
         "blog_post", "content", "Running Retrospectives, Step by Step")
     assert draft.current_version.content["slug"] == "running-retrospectives"
-    assert draft.compliance_flags == []
+    # The fixture post never uses its primary keyword, which the check in code catches (AC-17).
+    assert [f["explanation"] for f in draft.compliance_flags] == [
+        "The primary keyword is missing from the title, first paragraph, H2."]
 
 
 def test_backlog_is_used_before_proposing(project, fake_anthropic):
@@ -140,7 +145,7 @@ def test_long_meta_description_is_flagged(project, fake_anthropic):
     AgentConfig.objects.create(project=project, agent_type="content", config={"min_backlog": 0})
     run_content(project)
     flags = Draft.objects.get().compliance_flags
-    assert [f["rule"] for f in flags] == ["seo"] and "200 characters" in flags[0]["explanation"]
+    assert any(f["rule"] == "seo" and "200 characters" in f["explanation"] for f in flags)
 
 
 def test_request_topic_drafts_it_now(client, project, fake_anthropic, django_capture_on_commit_callbacks):

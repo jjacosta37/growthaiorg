@@ -45,7 +45,7 @@ Complex features start with `/prd`: product questions, then a short PRD in `docs
 
 - **A plan built from a PRD maps every AC** to the steps that deliver it and to how it will be verified, and adds nothing the PRD's Out list excludes.
 - **ACs are a contract.** If implementation shows one is wrong or impossible, stop and ask. An approved change is logged under "Changes after agreement", never made silently.
-- Set the status to `building` when implementation starts and to `shipped` when the PR merges. The PR description lists every AC with ✅ and how it was checked.
+- Set the status to `building` when implementation starts and to `shipped` on the feature branch **before the PR opens**, in the same commit as the feature doc: a PR is expected to merge, so the PR ships the PRD in its final state. If the PR is closed without merging, set it back to `building` (or `dropped`, with a line saying why). The PR description lists every AC with ✅ and how it was checked.
 
 ## Feature docs
 

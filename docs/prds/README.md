@@ -11,7 +11,7 @@ A PRD records what a complex feature does before anyone plans how to build it. I
 | `draft` | Being discussed. ACs can still change and be renumbered freely. |
 | `agreed` | The user explicitly accepted every AC. Committed as the first commit of `feat/<slug>`. |
 | `building` | Implementation has started. |
-| `shipped` | The PR has merged. |
+| `shipped` | Built, and its PR is open or merged. Set on the feature branch before the PR opens, with the feature doc. If the PR closes without merging, go back to `building` or `dropped`. |
 | `dropped` | Not built. Keep the file and add one line saying why. |
 
 From `agreed` on, ACs change only with the user's approval, and each change is logged under **Changes after agreement**. Never edit an agreed AC silently.

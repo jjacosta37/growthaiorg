@@ -62,11 +62,11 @@ A quick mechanical pass helps: extract the backticked paths and run `git cat-fil
 ### 6. Index
 Add or update the feature's row in the **Index** table at the bottom of `docs/features/README.md`: a link, a one-line summary, the `updated` date. Keep the rows sorted by feature name.
 
-Don't change the PRD's status here. It moves to `shipped` when the PR merges (CLAUDE.md, "Feature PRDs").
+If the feature has a PRD whose status is `building`, set it to `shipped` (CLAUDE.md, "Feature PRDs"): the PR ships the PRD in its final state. Don't edit anything else in the PRD.
 
 ### 7. Store, on the feature branch
 1. Stay on the feature's branch. If the working tree has changes unrelated to the feature, ask before committing.
-2. Commit the doc and the index row. Use the message `Document <feature name>` (or `Update the <feature name> doc`), ending with the commit attribution lines from the system reminder. **During review**, when the doc changes because the code did, commit them together, in one commit.
+2. Commit the doc, the index row and any PRD status change. Use the message `Document <feature name>` (or `Update the <feature name> doc`), ending with the commit attribution lines from the system reminder. **During review**, when the doc changes because the code did, commit them together, in one commit.
 3. Run `/security-scan`, as CLAUDE.md requires before every push. A doc-only commit on top of a scanned commit has no code changes, so it can be scanned with `--base <scanned commit>`. Take that commit from the gate's marker, `cat "$(git rev-parse --git-path luka-security-scan)"`, never from memory or a PR description, and use it only if `git merge-base --is-ancestor <sha> HEAD` succeeds and `git diff --name-only <sha>` lists only `docs/` files. Otherwise run a full scan. In the PR description, keep the full-branch `## Security scan` section and add a line for the doc commit; don't replace it.
 4. Then:
    - **No PR yet** (the normal case): push and open the feature's PR. Its description links the doc as the place to start the review, then lists the ACs and includes the scan's `## Security scan` section. Add the new PR number to the doc's `prs:` in a follow-up commit only if it's missing.

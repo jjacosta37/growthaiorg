@@ -49,7 +49,14 @@ Complex features start with `/prd`: product questions, then a short PRD in `docs
 
 ## Feature docs
 
-After a feature merges, `/feature-doc <feature>` records it in `docs/features/`: how it behaves, why it was built that way, and how it works in the code, checked against the code (`docs/features/README.md` has the template). When a later change alters a documented feature, update its doc in the same way rather than adding a new one.
+Every feature PR carries its feature doc in `docs/features/`: how it behaves, why it was built that way, and how it works in the code, checked against the code (`docs/features/README.md` has the template). The user reviews the PR from the doc, so it is written **before the PR opens**, not after the merge.
+
+1. **Build** the feature on its branch.
+2. **Document it:** `/feature-doc <feature>` writes the doc (or updates the existing one) against the branch's code and commits it on the same branch.
+3. **Open the PR:** `/security-scan`, push, open the PR. Its description links the doc as the place to start the review.
+4. **Review changes update the doc too.** When the user asks for a change on the open PR that alters behaviour, a decision or how it works, update the doc in the same commit as the code, then rescan and push.
+
+A later change to an already documented feature updates its doc in that change's PR rather than adding a new one.
 
 ## Python code standards
 

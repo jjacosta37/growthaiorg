@@ -1,24 +1,24 @@
 # Feature docs
 
-A feature doc records what a shipped feature **is**: how it behaves for the user, why it was built that way, and how it works in the code. It's what you read months later, when you want to remember a feature, answer a question about it, or change it safely.
+A feature doc records what a feature **is**: how it behaves for the user, why it was built that way, and how it works in the code. It's what the user reviews a feature's PR from, and what you read months later, when you want to remember a feature, answer a question about it, or change it safely.
 
-Create or update one with `/feature-doc <feature>` (`.claude/skills/feature-doc/SKILL.md`), after the feature's PR has merged.
+Create or update one with `/feature-doc <feature>` (`.claude/skills/feature-doc/SKILL.md`) on the feature's branch, **before the PR opens**, so it ships in the same PR. When review asks for a change that alters the feature, the doc is updated in the same commit (CLAUDE.md, "Feature docs").
 
 ## How it differs from a PRD
 | | PRD (`docs/prds/`) | Feature doc (`docs/features/`) |
 |---|---|---|
-| Written | Before planning | After shipping |
+| Written | Before planning | With the feature, before its PR opens; kept current through review |
 | Records | What was **agreed**: the acceptance criteria | What was **built**, and why |
 | Content | Product only, no implementation | Product **and** technical |
-| Changes | Only with approval, logged | Kept current as the feature changes |
+| Changes | Only with approval, logged | Updated in every PR that changes the feature |
 
 When a feature has a PRD, its doc links to it and doesn't copy the ACs. When it doesn't, the doc is the only record of the product decisions, so they go in it.
 
 ## Files
-`<slug>.md`, a short kebab-case name for the feature, e.g. `reddit-feedback-learnings.md`. When the feature has a PRD, use the PRD's slug without its number, so the two pair up. One file per feature. A later change to the feature updates its doc, with a line under **History**; it doesn't start a new one.
+`<slug>.md`, a short kebab-case name for the feature, e.g. `reddit-feedback-learnings.md`. When the feature has a PRD, use the PRD's slug without its number, so the two pair up. One file per feature. A later change to the feature updates its doc, with a line under **History**; it doesn't start a new one. Changes made during a PR's own review don't get a History line of their own: the doc simply describes the feature as that PR ships it.
 
 ## Writing a good one
-- **Accurate over complete.** Every name, path, limit and endpoint is checked against the code at the time of writing. A doc that is wrong is worse than a short one.
+- **Accurate over complete.** Every name, path, limit and endpoint is checked against the code on the feature's branch at the time of writing. A doc that is wrong is worse than a short one.
 - **The why is the valuable part.** The code shows what was built; only the doc keeps why, and what was rejected. Spend the effort on Decisions.
 - **Point at the code; don't copy it.** Name the file and the function or class (`apps/feedback/pipeline.py`, `digest_feedback`). No line numbers: they drift with every edit.
 - **Product first.** The top half reads without knowing the code; the technical half is for whoever changes it next.
@@ -30,7 +30,7 @@ When a feature has a PRD, its doc links to it and doesn't copy the ACs. When it 
 ```markdown
 ---
 title: <Feature name>
-status: shipped        # shipped | changed | removed
+status: shipped        # shipped | changed | removed: the feature as this PR ships it
 prd:                   # docs/prds/NNNN-<slug>.md, if there is one
 prs: []                # e.g. [4, 5]
 updated: YYYY-MM-DD

@@ -16,3 +16,12 @@ Work we've decided to leave for later, so it isn't forgotten. Each item says wha
   1. **A minimum interval for agent schedules** (recommended). It fixes the root cause for every agent, and it's the fix for §14 Medium 4, which this item makes worse. AC-14 stays as agreed.
   2. **Limit topic research to once every N hours per project.** It narrows only this path, and it changes AC-14 of PRD 0001, so the PRD would log a change after agreement and the feature doc would be updated.
 - **Related:** `docs/security-patterns.md` §11 (spend) and §14 Medium 4 (no minimum interval for agent cron).
+
+### Check that a published blog post can be indexed
+- **Added:** 2026-10-14 · from PRD 0002 (blog posts as GitHub pull requests, `docs/prds/0002-github-blog-prs.md`)
+- **Problem:** once a post is merged and deployed, nothing tells the user if search engines can't index it. The page might 404, carry a `noindex` tag, sit under a folder that `robots.txt` blocks, or be missing from the sitemap. Nobody notices until the post gets no traffic.
+- **Why it was left:** PRD 0002 deliberately adds only the post's own file to the PR. Editing `robots.txt` or the sitemap from a PR is fragile, because most site frameworks generate them at build time. A check after publishing catches the real failures without touching site files.
+- **Options:**
+  1. **Check when the user marks a draft Posted with its URL** (recommended). Luka fetches the page and checks that it returns 200, has no `noindex`, isn't disallowed by `robots.txt` and is listed in the sitemap (Luka already reads sitemaps during onboarding). Problems show on the draft. The check is an outbound fetch, so it follows the SSRF rules in `docs/security-patterns.md` §6.
+  2. **Re-check periodically** until the post shows up in the sitemap. This catches deploys that land later, but costs a scheduled task per post.
+- **Related:** `docs/prds/0002-github-blog-prs.md` (Out of scope: robots.txt and sitemap edits; no PR-state tracking).

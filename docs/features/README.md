@@ -98,4 +98,5 @@ Known gaps, accepted trade-offs and ideas that were left for later.
 ## Index
 | Feature | Summary | Updated |
 |---|---|---|
+| [Evidence-backed blog topics](evidence-backed-topics.md) | Content Agent topics backed by Reddit questions and keyword search volume and difficulty, ranked by weights you set; topic research fetches Reddit posts that still get replies. | 2026-10-13 |
 | [Reddit Agent feedback, learnings and reply voice](reddit-feedback-learnings.md) | Rate and comment on drafts; the agent folds it into editable learnings for writing and post selection. Plus custom instructions, a human-sounding reply style and replies pitched to the poster. | 2026-10-08 |

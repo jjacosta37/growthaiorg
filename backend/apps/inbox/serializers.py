@@ -85,11 +85,12 @@ class DraftDetailSerializer(DraftListSerializer):
     versions = DraftVersionSerializer(many=True)
     char_limit = serializers.SerializerMethodField()
     feedback = serializers.SerializerMethodField()
+    pull_request = serializers.SerializerMethodField()
 
     class Meta(DraftListSerializer.Meta):
         fields = [*DraftListSerializer.Meta.fields, "content", "copy_text", "open_url", "source_post",
                   "blog_topic", "compliance_flags", "versions", "char_limit", "posted_at", "posted_url",
-                  "dismiss_reason", "dismiss_note", "feedback"]
+                  "dismiss_reason", "dismiss_note", "feedback", "pull_request"]
 
     def get_copy_text(self, obj) -> str:
         return as_text(obj.kind, obj.current_version.content)
@@ -109,6 +110,12 @@ class DraftDetailSerializer(DraftListSerializer):
 
         return [{k: v for k, v in e.items() if k not in ("draft", "draft_title")}
                 for e in FeedbackEntrySerializer(obj.feedback.all(), many=True).data]
+
+    def get_pull_request(self, obj: Draft) -> dict | None:
+        """The blog draft's pull request: state, link and which actions are available."""
+        from apps.publishing.services import pull_request_info
+
+        return pull_request_info(obj)
 
     def get_char_limit(self, obj) -> int | None:
         if obj.kind not in ("x_post", "x_thread"):

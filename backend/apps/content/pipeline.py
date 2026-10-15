@@ -17,7 +17,8 @@ from apps.core.text import is_near_duplicate, slugify
 from apps.inbox import compliance, services
 from apps.inbox.models import Draft, DraftKind, DraftVersion
 from apps.inbox.nudges import nudge_instruction
-from apps.policy.service import policy_for
+from apps.policy.service import policy_for, with_blog_disclaimer
+from apps.publishing import services as publishing
 from apps.reddit.models import RedditPost
 from llm.models import LLMCall
 from llm.schemas import TopicProposal
@@ -181,12 +182,12 @@ def finalize_post(parsed, disclaimer: str = "") -> dict:
     """Deterministic clean-up of the model's post: a valid slug, and the policy's disclaimer if it has one."""
     body = parsed.body_md.strip()
     body = re.sub(r"\A#\s+.*\n+", "", body)  # the title is rendered separately; drop a stray H1
-    if disclaimer and disclaimer.lower() not in body.lower():
-        body += f"\n\n---\n\n*{disclaimer}*"
+    body = with_blog_disclaimer(body, disclaimer)
     return {
         "title": parsed.title.strip(),
         "meta_description": parsed.meta_description.strip(),
-        "slug": slugify(parsed.slug or parsed.title),
+        # A title with no Latin letters or digits slugifies to "", which the content schema refuses.
+        "slug": slugify(parsed.slug or parsed.title) or slugify(parsed.title) or "post",
         "keywords": [k.strip() for k in parsed.target_keywords if k.strip()],
         "body_md": body + "\n",
     }
@@ -242,6 +243,7 @@ def draft_post(run: AgentRun, reporter: RunReporter, topic: BlogTopic, cfg: Cont
     topic.save(update_fields=["status", "updated_at"])
     words = len(content["body_md"].split())
     reporter.success(f"Drafted “{content['title'][:70]}” ({words} words)")
+    publishing.after_draft_written(draft, run, reporter)
     return draft
 
 

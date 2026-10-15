@@ -12,6 +12,18 @@ def policy_for(project) -> ContentPolicy:
     return policy
 
 
+def with_blog_disclaimer(body_md: str, disclaimer: str) -> str:
+    """`body_md` ending with the policy's blog disclaimer, unless it is empty or already there.
+
+    One rule for every place a post is finished: the writer's clean-up and the file a pull
+    request carries, so a human edit that dropped the disclaimer still ships with it.
+    """
+    body = body_md.rstrip()
+    if disclaimer and disclaimer.lower() not in body.lower():
+        body += f"\n\n---\n\n*{disclaimer}*"
+    return body
+
+
 def guardrail_variables(project) -> dict:
     """Registered with llm.context: rendered into every LLM call's guardrails. Deterministic
     (fixed rule order, no timestamps), so it stays inside the cached prefix."""

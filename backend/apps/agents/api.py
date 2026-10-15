@@ -15,7 +15,7 @@ from apps.core.text import http_url
 
 from . import registry
 from .draft_models import available_draft_models, draft_model_options, effective_draft_key
-from .models import AgentConfig, AgentRun
+from .models import AgentConfig, AgentRun, AgentType
 from .runs import RunConflict, create_run
 from .schedule import InvalidCron, next_run_at, parse_cron, sync_periodic_task
 from .serializers import AgentRunSerializer
@@ -51,6 +51,7 @@ def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
         "cron": config.cron,
         "config": spec.config_model.model_validate(config.config).model_dump(),
         "publish_mode": config.publish_mode,
+        "automatic_available": _automatic_available(project, spec),
         "draft_model": effective_draft_key(project, config.draft_model),
         "draft_models": draft_model_options(project),
         "last_run": AgentRunSerializer(last).data if last else None,
@@ -58,6 +59,13 @@ def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
         "next_run_at": nxt.isoformat() if nxt else None,
         "ready": Draft.objects.filter(project=project, agent_type=spec.agent_type, status=Draft.Status.NEW).count(),
     }
+
+
+def _automatic_available(project: Project, spec: registry.AgentSpec) -> bool:
+    """Automatic mode is the Content Agent's, and needs a ready GitHub connection."""
+    from apps.publishing.connections import can_automate
+
+    return spec.agent_type == AgentType.CONTENT and can_automate(project)
 
 
 class AgentListView(APIView):
@@ -72,10 +80,12 @@ class AgentConfigUpdateSerializer(serializers.Serializer):
     cron = serializers.CharField(required=False, max_length=100)
     config = serializers.JSONField(required=False)
     draft_model = serializers.CharField(required=False, max_length=20)
+    publish_mode = serializers.ChoiceField(choices=AgentConfig.PublishMode.choices, required=False)
 
 
 class AgentDetailView(APIView):
-    """GET the agent summary; PATCH {enabled?, cron?, config?, draft_model?} (config is merged, then validated)."""
+    """GET the agent summary; PATCH {enabled?, cron?, config?, draft_model?, publish_mode?} (config is merged,
+    then validated)."""
 
     @extend_schema(responses={200: dict})
     def get(self, request, agent_type):
@@ -108,6 +118,11 @@ class AgentDetailView(APIView):
             if v["draft_model"] not in available_draft_models(project):
                 return Response({"draft_model": ["Not an available model"]}, status=status.HTTP_400_BAD_REQUEST)
             config.draft_model = v["draft_model"]
+        if "publish_mode" in v:
+            if v["publish_mode"] == AgentConfig.PublishMode.AUTOMATIC and not _automatic_available(project, spec):
+                return Response({"publish_mode": ["Automatic pull requests need a connected GitHub repository"]},
+                                status=status.HTTP_400_BAD_REQUEST)
+            config.publish_mode = v["publish_mode"]
         if "enabled" in v:
             config.enabled = v["enabled"]
         with transaction.atomic():

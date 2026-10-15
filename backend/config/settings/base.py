@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.content",
     "apps.xagent",
     "apps.stats",
+    "apps.publishing",
 ]
 
 MIDDLEWARE = [

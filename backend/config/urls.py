@@ -12,6 +12,7 @@ urlpatterns = [
     path("api/", include("apps.feedback.urls")),
     path("api/", include("apps.content.urls")),
     path("api/", include("apps.stats.urls")),
+    path("api/", include("apps.publishing.urls")),
 ]
 
 if settings.API_DOCS_ENABLED:

@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Blog posts as GitHub pull requests
-status: building
+status: shipped
 created: 2026-10-14
 agreed: 2026-10-14
 branch: claude/dazzling-cori-qcr5gf

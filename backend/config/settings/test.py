@@ -14,6 +14,7 @@ ANTHROPIC_API_KEY = "test-key"
 APIFY_TOKEN = ""
 REDDIT_SOURCE = "fake"
 KEYWORD_SOURCE = "fake"
+GIT_HOST = "fake"
 LANGSMITH_TRACING = False
 
 # Tests must never reach LangSmith. A developer's .env commonly has LANGSMITH_TRACING=true,

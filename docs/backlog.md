@@ -55,3 +55,15 @@ Work we've decided to leave for later, so it isn't forgotten. Each item says wha
   5. **Shared-file sites:** append an entry to a JSON or YAML data file (data, not code). Editing source files (TS/JS) stays out because of escaping and merge conflicts.
   6. **CMS targets** (headless CMS APIs) behind the same publish interface, as a separate PRD.
 - **Related:** `docs/prds/0002-github-blog-prs.md` (Out of scope list).
+
+### Open blog PRs without write access to the customer's repository
+- **Added:** 2026-10-15 · from PRD 0002 (blog posts as GitHub pull requests)
+- **Problem:** to open a PR, Luka's GitHub App needs Contents: write. GitHub can't narrow that to one folder or one branch prefix, so the app could technically write anywhere in a granted repo. Luka's code prevents this, and protecting the base branch makes GitHub enforce it too. Some customers still won't grant write access to their code.
+- **Why it was left:** both alternatives give up part of PRD 0002: Automatic mode, "Update PR", or both. The GitHub App with downscoped tokens is the standard pattern.
+- **Options:**
+  1. **Issue plus a workflow in the customer's repo.** Luka needs only Issues: write. It files an issue carrying the post, and a workflow file Luka provides turns the issue into a branch and PR using the repo's own token. Costs:
+     - the customer adds the workflow and allows Actions to create PRs
+     - PRs opened by Actions don't trigger the repo's other workflows
+     - updates go through the same workflow
+  2. **Prefilled "new file" link.** No app at all: Luka opens GitHub's web editor with the file filled in, and the user commits and opens the PR themselves. Manual mode only, no Update PR, and long posts may exceed URL length limits.
+- **Related:** `docs/prds/0002-github-blog-prs.md`, `docs/security-patterns.md` §14 (GitHub App key).

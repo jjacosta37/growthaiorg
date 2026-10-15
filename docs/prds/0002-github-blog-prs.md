@@ -1,7 +1,7 @@
 ---
 id: 0002
 title: Blog posts as GitHub pull requests
-status: agreed
+status: building
 created: 2026-10-14
 agreed: 2026-10-14
 branch: claude/dazzling-cori-qcr5gf
@@ -83,3 +83,4 @@ None.
 
 ## Changes after agreement
 <!-- YYYY-MM-DD · AC-n · what changed · why (approved by the user) -->
+- 2026-10-15 · AC-2 · Picking a base branch that GitHub doesn't protect shows a warning (advice only; connecting still works) · Luka's GitHub App needs repo-wide write access, so only branch protection makes GitHub itself enforce AC-13 against a bug or a leaked key (approved by the user)

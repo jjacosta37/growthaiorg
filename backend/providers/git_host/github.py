@@ -152,12 +152,26 @@ class GitHubAppHost:
                                         params={"per_page": 100, "page": page})
                 for item in listing.get("installations", []):
                     if item.get("id") == installation_id:
-                        return Installation(id=installation_id, account=item.get("account", {}).get("login", ""))
+                        return Installation(id=installation_id, account=item.get("account", {}).get("login", ""),
+                                            repos=self._pushable(user_token, installation_id))
                 if len(listing.get("installations", [])) < 100:
                     break
             raise NotFound("That GitHub installation isn't one of yours")
 
         return self._call("verify_installation", "", run)
+
+    def _pushable(self, user_token: str, installation_id: int) -> list[str]:
+        """Repositories in the installation that the user can push to (or administers)."""
+        repos: list[str] = []
+        for page in range(1, MAX_PAGES + 1):
+            data = self._request("GET", f"/user/installations/{installation_id}/repositories", bearer=user_token,
+                                 params={"per_page": 100, "page": page})
+            items = data.get("repositories", [])
+            repos += [r["full_name"] for r in items
+                      if (r.get("permissions") or {}).get("push") or (r.get("permissions") or {}).get("admin")]
+            if len(items) < 100:
+                break
+        return repos
 
     # --- reading --------------------------------------------------------------------------
 

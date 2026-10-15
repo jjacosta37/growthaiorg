@@ -6,7 +6,7 @@ code-level half of "Luka never pushes to the base branch"; branch protection on 
 repository is the half GitHub enforces (docs/security-patterns.md §7).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 BRANCH_PREFIX = "luka/"
@@ -58,10 +58,16 @@ def check_writable(branch: str) -> None:
 
 @dataclass
 class Installation:
-    """An installation the connecting user can access, as verified with the host."""
+    """An installation the connecting user can access, as verified with the host.
+
+    `repos` are the repositories in it that this user can push to themselves. The host lists
+    an installation for anyone who can merely read one of its repositories, and Luka then acts
+    with the installation's own access, so this set is what a project may be pointed at.
+    """
 
     id: int
     account: str
+    repos: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -94,7 +100,8 @@ class GitHost(Protocol):
         ...
 
     def verify_installation(self, code: str, installation_id: int) -> Installation:
-        """Check, as the user who just authorised, that `installation_id` is one of theirs.
+        """Check, as the user who just authorised, that `installation_id` is one of theirs, and
+        which of its repositories they can push to.
 
         Raises:
             NotFound: The installation isn't among the user's.

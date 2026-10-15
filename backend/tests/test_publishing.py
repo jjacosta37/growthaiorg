@@ -41,7 +41,8 @@ def gh():
 @pytest.fixture
 def conn(project, gh):
     return GitHubConnection.objects.create(project=project, installation_id=1, account="acme", repo="acme/site",
-                                           base_branch="main", base_branch_protected=True, folder="content/blog",
+                                           allowed_repos=["acme/site"], base_branch="main", base_branch_protected=True,
+                                           folder="content/blog",
                                            status=GitHubConnection.Status.READY)
 
 
@@ -120,7 +121,7 @@ def test_an_org_install_waiting_for_approval_saves_nothing(client, project, gh):
 
 
 def test_settings_save_checks_the_repo_branch_and_folder(client, project, gh):
-    GitHubConnection.objects.create(project=project, installation_id=1)
+    GitHubConnection.objects.create(project=project, installation_id=1, allowed_repos=["acme/site"])
     ok = {"repo": "acme/site", "base_branch": "main", "folder": "/content/blog/"}
     assert client.patch("/api/github/connection/", {**ok, "repo": "acme/other"}, format="json").status_code == 400
     assert client.patch("/api/github/connection/", {**ok, "base_branch": "nope"}, format="json").status_code == 400
@@ -135,7 +136,7 @@ def test_settings_save_checks_the_repo_branch_and_folder(client, project, gh):
 
 def test_an_unprotected_base_branch_is_reported(client, project, gh):
     gh.repos["acme/site"].protected = set()
-    GitHubConnection.objects.create(project=project, installation_id=1)
+    GitHubConnection.objects.create(project=project, installation_id=1, allowed_repos=["acme/site"])
     resp = client.patch("/api/github/connection/", {"repo": "acme/site", "base_branch": "main"}, format="json")
     assert resp.json()["base_branch_protected"] is False
 
@@ -483,3 +484,65 @@ def test_the_callback_falls_back_to_the_state_kept_in_the_session(client, projec
 def test_without_any_state_nothing_is_saved(client, project, gh):
     resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1})
     assert "github=error" in resp["Location"] and not GitHubConnection.objects.exists()
+
+
+def test_only_repositories_the_user_can_push_to_are_offered_or_saved(client, project, gh):
+    # GitHub lists an installation for anyone who can read one of its repositories; Luka acts
+    # with the installation's access, so a read-only user mustn't reach the other repositories.
+    gh.repos["acme/private"] = type(gh.repos["acme/site"])()
+    gh.pushable = {"acme/site"}
+    state = connections.connect_state(project.owner_id, project)
+    client.get("/api/github/callback/", {"state": state, "code": "c", "installation_id": 1})
+    assert GitHubConnection.objects.get(project=project).allowed_repos == ["acme/site"]
+    assert [r["full_name"] for r in client.get("/api/github/repos/").json()] == ["acme/site"]
+    resp = client.patch("/api/github/connection/", {"repo": "acme/private", "base_branch": "main"}, format="json")
+    assert resp.status_code == 400
+
+
+def test_an_installation_with_nothing_pushable_is_refused(client, project, gh):
+    gh.pushable = set()
+    state = connections.connect_state(project.owner_id, project)
+    resp = client.get("/api/github/callback/", {"state": state, "code": "c", "installation_id": 1})
+    assert "github_error=no_push" in resp["Location"] and not GitHubConnection.objects.exists()
+
+
+def test_callback_errors_travel_as_codes_not_text(client, project, gh):
+    resp = client.get("/api/github/callback/", {"state": "forged", "code": "c", "installation_id": 1})
+    assert "github_error=expired" in resp["Location"]
+
+
+def test_the_session_state_is_used_once(client, project, gh):
+    client.post("/api/github/connect/")
+    client.get("/api/github/callback/", {"setup_action": "request"})  # any callback spends it
+    resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1})
+    assert "github=error" in resp["Location"] and not GitHubConnection.objects.exists()
+
+
+def test_an_unchecked_draft_is_held_in_automatic_mode(project, conn, gh):
+    AgentConfig.objects.create(project=project, agent_type="content", publish_mode="automatic")
+    draft = blog_draft(project)  # never linted: lint_complete is unset
+    run = AgentRun.objects.create(project=project, kind="content")
+    services.after_draft_written(draft, run, RunReporter(run))
+    row = DraftPullRequest.objects.get(draft=draft)
+    assert row.state == "held" and "couldn't run" in row.note and not gh.writes
+
+
+def test_a_failed_lint_holds_the_post(project, conn, gh, fake_anthropic):
+    from tests.fakes import message
+
+    automatic_project(project)
+
+    def respond(params):
+        if "ComplianceLint" in str(params.get("output_config")):
+            return message("", stop_reason="refusal")
+        return responder(post=CLEAN_POST)(params)
+
+    fake_anthropic(responder=respond)
+    run_content(project)
+    assert DraftPullRequest.objects.get().state == "held" and not gh.repos["acme/site"].prs
+
+
+def test_issue_references_in_model_text_are_neutralised(project, conn):
+    draft = blog_draft(project, content={**CONTENT, "meta_description": "Closes #1 and acme/site#2"})
+    body = services.pr_body(draft, draft.current_version.content)
+    assert "#1" not in body and "#2" not in body

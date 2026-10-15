@@ -37,6 +37,13 @@ def deterministic_flags(draft: Draft, text: str) -> list[dict]:
 
 
 def lint(draft: Draft, run=None) -> list[dict]:
+    """Flag the draft's current version and save the flags on it.
+
+    Also sets `draft.lint_complete` (not a field) on this instance: False when the model check
+    couldn't run, so a caller that acts on "no flags" (automatic pull requests) can tell a
+    clean draft from an unchecked one.
+    """
+    draft.lint_complete = False
     content = draft.current_version.content
     text = as_text(draft.kind, content)
     flags = deterministic_flags(draft, text)
@@ -44,6 +51,7 @@ def lint(draft: Draft, run=None) -> list[dict]:
         result = llm.complete("compliance.lint", {"kind": draft.kind, "text": text}, project=draft.project, run=run)
         deterministic_rules = {f["rule"] for f in flags}
         flags += [f.model_dump() for f in result.parsed.flags if f.rule not in deterministic_rules]
+        draft.lint_complete = True
     except llm.LLMError as exc:
         # Never blocks the draft, but it must not be invisible either: without the run
         # warning the only trace of a failed lint was a line in the worker's stdout.

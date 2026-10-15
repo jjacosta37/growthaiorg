@@ -129,12 +129,16 @@ def after_draft_written(draft: Draft, run: AgentRun, reporter: RunReporter) -> N
     """
     if not automatic(draft.project):
         return
-    if draft.compliance_flags:
-        n = len(draft.compliance_flags)
+    n = len(draft.compliance_flags)
+    # Fail closed: a draft the compliance check couldn't read is held like a flagged one.
+    checked = getattr(draft, "lint_complete", False)
+    if n or not checked:
+        note = (f"Held for review: {n} flag{'s' if n != 1 else ''} to check first" if n
+                else "Held for review: the compliance check couldn't run on this draft")
         DraftPullRequest.objects.update_or_create(
-            draft=draft, defaults={"project": draft.project, "state": DraftPullRequest.State.HELD,
-                                   "note": f"Held for review: {n} flag{'s' if n != 1 else ''} to check first"})
-        reporter.event(f"Held draft #{draft.pk} for review instead of opening a PR", draft_id=draft.pk, flags=n)
+            draft=draft, defaults={"project": draft.project, "state": DraftPullRequest.State.HELD, "note": note})
+        reporter.event(f"Held draft #{draft.pk} for review instead of opening a PR", draft_id=draft.pk, flags=n,
+                       lint_complete=checked)
         return
     open_pull_request(draft, run, reporter)
 
@@ -143,8 +147,12 @@ def after_draft_written(draft: Draft, run: AgentRun, reporter: RunReporter) -> N
 
 
 def _neutralise_mentions(text: str) -> str:
-    """Stop model-written text from @-mentioning people in the PR (GitHub would notify them)."""
-    return text.replace("@", "@​")
+    """Stop model-written text from @-mentioning people or referencing issues in the PR.
+
+    GitHub would notify a mentioned person, and "closes #12" would close the customer's issue
+    when the PR merges. A zero-width space after `@` and `#` breaks both, and reads the same.
+    """
+    return text.replace("@", "@\u200b").replace("#", "#\u200b")
 
 
 def pr_body(draft: Draft, content: dict) -> str:

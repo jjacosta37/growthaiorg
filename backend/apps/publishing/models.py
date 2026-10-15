@@ -17,6 +17,9 @@ class GitHubConnection(models.Model):
     project = models.OneToOneField("core.Project", on_delete=models.CASCADE, related_name="github_connection")
     installation_id = models.BigIntegerField()
     account = models.CharField(max_length=100, blank=True)  # the GitHub user or organisation
+    # Repositories the connecting user could push to on GitHub when they connected. The
+    # installation may reach more, but a project can only be pointed at one of these.
+    allowed_repos = models.JSONField(default=list, blank=True)
     repo = models.CharField(max_length=200, blank=True)  # "owner/name"
     base_branch = models.CharField(max_length=200, blank=True)
     base_branch_protected = models.BooleanField(default=False)

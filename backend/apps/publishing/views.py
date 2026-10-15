@@ -98,22 +98,25 @@ class CallbackView(APIView):
     @extend_schema(parameters=[CallbackSerializer], responses={302: None})
     def get(self, request: Request) -> HttpResponseRedirect:
         """Verify and save the installation; the result rides back in `?github=`."""
+        # One use only: the session copy goes on every callback, whatever the outcome.
+        session_state = request.session.pop(SESSION_STATE_KEY, "")
         data = CallbackSerializer(data=request.query_params)
         if not data.is_valid():
-            return self._back(error="GitHub sent back an unexpected answer. Try connecting again.")
+            return self._back(error="bad_request")
         v = data.validated_data
+        state = v["state"] or session_state
         if v["setup_action"] == "request":
             return self._back(result="requested")  # an organisation owner must approve the install
         if "installation_id" not in v:
-            return self._back(error="GitHub didn't say which installation to use. Try connecting again.")
-        state = v["state"] or request.session.pop(SESSION_STATE_KEY, "")
+            return self._back(error="no_installation")
         try:
             connections.complete_install(request.user, state, v["code"], v["installation_id"])
         except connections.ConnectError as exc:
-            return self._back(error=str(exc))
+            return self._back(error=exc.code)
         return self._back(result="connected")
 
     def _back(self, *, result: str = "error", error: str = "") -> HttpResponseRedirect:
+        """Back to Settings. Errors travel as a code the frontend maps to its own text."""
         params = {"github": result, **({"github_error": error} if error else {})}
         return HttpResponseRedirect(f"{settings.LUKA_APP_URL}/settings?{urlencode(params)}")
 

@@ -48,6 +48,7 @@ A blog draft then gets **Create PR**: Luka adds one Markdown file on a new `luka
 - When a post is written in Automatic mode:
   - **No flags:** the PR opens in the same run.
   - **Any flag, SEO warnings included:** no PR. The draft says "Held for review: N flags to check first" and offers Create PR.
+- **The compliance check couldn't run** (the model call failed): the draft is held the same way, with a note saying so.
 - Regenerating a draft never opens or updates a PR on its own.
 
 **Failures** show on the draft as one line plus **Retry** (or **Retry update**):
@@ -73,21 +74,22 @@ In Automatic mode, a failed PR never stops the draft landing in the inbox.
   - a prefilled "new file" link (no app at all)
 
   They give up Automatic mode or Update PR.
-- **Verify the installation on connect.** GitHub returns the installation id through the browser, where anyone can edit it. Luka requires a signed state for this user and project, and a one-time OAuth code proving the installation is among the user's own. Without that, one tenant could open PRs in another's repositories.
+- **Verify the installation on connect.** GitHub returns the installation id through the browser, where anyone can edit it. Luka requires a signed state for this user and project, and a one-time OAuth code proving the installation is among the user's own. Without that, one tenant could open PRs in another's repositories. The check also records which repositories the user can **push** to on GitHub. GitHub lists an installation for anyone who can merely read one of its repositories, and Luka acts with the installation's own access, so only those repositories can be chosen. This was found by the security scan's review.
 - **One new file per post; never edit existing site files.** Concurrent PRs then never conflict, and Luka never edits a site's source code. Sites that list posts in one shared code file have to switch to one file per post first. A live check against a real site showed exactly that.
 - **Renamable standard fields plus constant fields, not a template language.** This covers the common setups (an `excerpt` instead of `description`, an `author`, a `featured` flag) with nothing to inject into. Values are written with `yaml.safe_dump`.
 - **Hold every flagged post in Automatic mode, SEO flags included** (the user's call). Flags are warnings in the inbox, and an unattended PR would bypass them.
 - **No tracking of the PR's state.** Luka would need polling, or webhooks reaching the home-hosted server. The user marks Posted after merging.
 - **No sitemap or `robots.txt` edits.** Most site frameworks generate them at build time. A check after publishing that the post can be indexed is in the backlog.
-- **The PR body neutralises `@`** in model-written text, so a draft can't notify people on GitHub.
+- **The PR body neutralises `@` and `#`** in model-written text, so a draft can't notify people or close issues on GitHub.
+- **Automatic mode fails closed.** A post whose compliance check couldn't run is held like a flagged one. Otherwise "no flags" would mean "unchecked", which text in a source could provoke.
 
 ## How it works
 
 ### Flow
 1. **Connect:** `POST /api/github/connect/` returns the install URL with a signed state, which is also kept in the session. GitHub sends the browser to `GET /api/github/callback/`.
-2. **Callback:** `connections.complete_install` checks the state and project ownership, then calls `verify_installation`. That exchanges the OAuth code and looks for the installation in `GET /user/installations`. The connection is saved as `incomplete`, or `ready` on a reconnect when the saved repository is still reachable.
+2. **Callback:** `connections.complete_install` checks the state and project ownership, then calls `verify_installation`. That exchanges the OAuth code, looks for the installation in `GET /user/installations`, and collects the repositories the user can push to. With none, nothing is saved. Errors go back as codes (`ConnectError.code`). The connection is saved as `incomplete`, or `ready` on a reconnect when the saved repository is still reachable.
 3. **Settings:** `connections.save_settings` checks:
-   - the repository is in the installation's list
+   - the repository is in the installation's list and in `allowed_repos`
    - the base branch exists and isn't a `luka/` branch, and records whether it's protected
    - the folder (`clean_folder`) and the field settings (`FrontmatterSettings`)
 
@@ -104,7 +106,7 @@ In Automatic mode, a failed PR never stops the draft landing in the inbox.
 6. **Automatic:** the content run's `draft_post` calls `services.after_draft_written` after linting. It holds a flagged draft, or calls `open_pull_request` inside the same run.
 
 ### Data model
-- **`GitHubConnection`**, one per project: `installation_id`, `account`, `repo`, `base_branch`, `base_branch_protected`, `folder`, `field_names` (standard field → name in the file), `constant_fields` (`[{key, value}]`), and `status`: `incomplete` / `ready` / `needs_reconnect`.
+- **`GitHubConnection`**, one per project: `installation_id`, `account`, `allowed_repos` (the ones the connecting user can push to), `repo`, `base_branch`, `base_branch_protected`, `folder`, `field_names` (standard field → name in the file), `constant_fields` (`[{key, value}]`), and `status`: `incomplete` / `ready` / `needs_reconnect`.
 - **`DraftPullRequest`**, one per draft, enforced by a one-to-one key: `state` (`held` / `pending` / `open` / `failed`), `repo`, `branch`, `file_path`, `number`, `url`, `post_date`, `pushed_version` and `note`. `note` holds why the draft was held, or the last failure, in Luka's own words. A `pending` row older than 10 minutes (`PENDING_TIMEOUT`) no longer blocks a retry, so a create that died mid-way can't stick.
 - `AgentConfig.PublishMode` gains `automatic`, and `AgentRun.Kind` gains `publish_pr`.
 - `BlogContent.slug` (`apps/inbox/content.py`) is validated as kebab case.
@@ -191,6 +193,10 @@ Other limits:
 
 ## Limitations and follow-ups
 - A connect that GitHub returns without `state` relies on the state kept in the user's session. Whether GitHub echoes `state` when user authorisation is requested during install is (unverified) until the app is registered.
+- **Deferred (Medium, from the security scan): the session-state fallback.**
+  - **The gap:** a callback without `state` uses the state the user's own Connect click put in the session. It is spent on any callback and lasts 15 minutes at most. Within that window, a crafted link could still attach an installation the attacker controls, so the user's posts would go to the attacker's repository once they pick it.
+  - **Why the fallback is there:** it only matters if GitHub omits `state` on the authorise-during-install redirect, which is (unverified).
+  - **The fix:** once the app is registered and GitHub is shown to echo `state`, remove the fallback.
 - `GIT_HOST=fake` keeps one fake per process, so in local dev the web and worker processes see different fake repositories.
 - Backlog:
   - checking a published post can be indexed

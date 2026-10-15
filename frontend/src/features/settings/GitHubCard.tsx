@@ -28,6 +28,17 @@ const FIELD_LABEL: Record<FrontmatterField, string> = {
   date: "Date",
 };
 
+/** The install callback sends a code, never text, so a crafted link can't put words on this page. */
+const CONNECT_ERRORS: Record<string, string> = {
+  expired: "The GitHub connection link expired. Try connecting again.",
+  other_account: "That GitHub connection was started from another Luka account.",
+  no_code: "GitHub didn't send an authorisation. Check the app's settings, then try again.",
+  not_yours: "That GitHub installation isn't one your GitHub account can use.",
+  no_push: "Your GitHub account can't push to any repository in that installation.",
+  no_installation: "GitHub didn't say which installation to use. Try connecting again.",
+  bad_request: "GitHub sent back an unexpected answer. Try connecting again.",
+};
+
 type ConstantType = "text" | "number" | "boolean";
 
 interface ConstantRow {
@@ -63,7 +74,7 @@ export function GitHubCard() {
     if (result === "connected") toast.show("GitHub connected. Choose a repository below.");
     else if (result === "requested")
       toast.show("Install requested. An organisation owner has to approve it on GitHub.");
-    else toast.error(params.get("github_error") || "Couldn't connect GitHub");
+    else toast.error(CONNECT_ERRORS[params.get("github_error") ?? ""] ?? "Couldn't connect GitHub. Try again.");
     navigate(location.pathname, { replace: true });
   }, [location.pathname, location.search, navigate, toast]);
 

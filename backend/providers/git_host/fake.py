@@ -21,9 +21,12 @@ class FakeGitHost:
 
     name = "fake"
 
-    def __init__(self, repos: dict[str, FakeRepo] | None = None, *, installations: dict[int, str] | None = None):
+    def __init__(self, repos: dict[str, FakeRepo] | None = None, *, installations: dict[int, str] | None = None,
+                 pushable: set[str] | None = None):
+        """`pushable` limits which repositories the connecting user can push to (default: all)."""
         self.repos = repos if repos is not None else {"acme/site": FakeRepo()}
         self.installations = installations if installations is not None else {1: "acme"}
+        self.pushable = pushable
         self.writes: list[tuple] = []
         self.fail: GitHostError | None = None
 
@@ -46,7 +49,8 @@ class FakeGitHost:
         self._check()
         if installation_id not in self.installations:
             raise NotFound("That GitHub installation isn't one of yours")
-        return Installation(id=installation_id, account=self.installations[installation_id])
+        repos = [r for r in self.repos if self.pushable is None or r in self.pushable]
+        return Installation(id=installation_id, account=self.installations[installation_id], repos=repos)
 
     def list_repos(self, installation_id: int) -> list[Repo]:
         """Every repository in the fake."""

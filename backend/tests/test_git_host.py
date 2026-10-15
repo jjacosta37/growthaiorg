@@ -134,9 +134,16 @@ def test_installation_is_verified_against_the_users_own_list():
     host, stub = host_with({
         "POST github.com/login/oauth/access_token": (200, {"access_token": "user-token"}),
         "GET api.github.com/user/installations": (200, {"installations": [{"id": 7, "account": {"login": "acme"}}]}),
+        "GET api.github.com/user/installations/7/repositories": (200, {"repositories": [
+            {"full_name": "acme/site", "permissions": {"push": True}},
+            {"full_name": "acme/admin-only", "permissions": {"admin": True, "push": False}},
+            {"full_name": "acme/read-only", "permissions": {"pull": True, "push": False}},
+        ]}),
     })
     installation = host.verify_installation("code", 7)
     assert installation.account == "acme"
+    # Repositories the user can only read are left out, though the installation reaches them.
+    assert installation.repos == ["acme/site", "acme/admin-only"]
     listing = next(r for r in stub.requests if r.url.path == "/user/installations")
     assert listing.headers["Authorization"] == "Bearer user-token"
 

@@ -306,7 +306,7 @@ def github(project, other_project):
 
     host._fake = FakeGitHost()
     GitHubConnection.objects.create(project=project, installation_id=1, repo="acme/site", base_branch="main",
-                                    status="ready")
+                                    allowed_repos=["acme/site"], status="ready")
     theirs = GitHubConnection.objects.create(project=other_project, installation_id=2, repo="globex/secret-site",
                                              base_branch="main", status="ready")
     yield theirs

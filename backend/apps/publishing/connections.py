@@ -26,7 +26,15 @@ STATE_MAX_AGE = 15 * 60
 
 
 class ConnectError(Exception):
-    """Connecting or saving failed for a reason the user can act on; the message says which."""
+    """Connecting or saving failed for a reason the user can act on; the message says which.
+
+    `code` names the reason for the install callback, which passes only the code back to the
+    browser (so a crafted link can't put arbitrary text on Luka's page).
+    """
+
+    def __init__(self, message: str, code: str = "failed"):
+        super().__init__(message)
+        self.code = code
 
 
 def connection_for(project: Project) -> GitHubConnection | None:
@@ -51,22 +59,26 @@ def complete_install(user, state: str, code: str, installation_id: int) -> GitHu
     try:
         data = signing.loads(state, salt=STATE_SALT, max_age=STATE_MAX_AGE)
     except signing.BadSignature:
-        raise ConnectError("The GitHub connection link expired. Try connecting again.") from None
+        raise ConnectError("The GitHub connection link expired. Try connecting again.", "expired") from None
     if data.get("u") != user.pk:
-        raise ConnectError("This GitHub connection was started by another account")
+        raise ConnectError("This GitHub connection was started by another account", "other_account")
     project = Project.objects.filter(pk=data.get("p"), owner=user).first()
     if project is None:
-        raise ConnectError("This GitHub connection was started by another account")
+        raise ConnectError("This GitHub connection was started by another account", "other_account")
     if not code:
-        raise ConnectError("GitHub didn't send an authorisation code. Check the app's settings and try again.")
+        raise ConnectError("GitHub didn't send an authorisation code. Check the app's settings and try again.",
+                           "no_code")
     try:
         installation = get_git_host().verify_installation(code, installation_id)
     except GitHostError as exc:
-        raise ConnectError(exc.reason) from exc
+        raise ConnectError(exc.reason, "not_yours") from exc
+    if not installation.repos:
+        raise ConnectError("Your GitHub account can't push to any repository in that installation", "no_push")
     conn, _ = GitHubConnection.objects.update_or_create(
-        project=project, defaults={"installation_id": installation.id, "account": installation.account})
+        project=project, defaults={"installation_id": installation.id, "account": installation.account,
+                                   "allowed_repos": installation.repos})
     conn.status = GitHubConnection.Status.INCOMPLETE
-    if conn.repo:
+    if conn.repo and conn.repo in conn.allowed_repos:
         try:
             refresh_base_branch(conn)
             conn.status = GitHubConnection.Status.READY
@@ -78,13 +90,15 @@ def complete_install(user, state: str, code: str, installation_id: int) -> GitHu
 
 
 def list_repos(conn: GitHubConnection) -> list[Repo]:
-    """The repositories the user granted, marking the connection when access is gone.
+    """The repositories this project may use: reachable by the installation, and pushable by
+    the user who connected it. Marks the connection when access is gone.
 
     Raises:
         GitHostError: GitHub refused or failed.
     """
+    allowed = set(conn.allowed_repos)
     try:
-        return get_git_host().list_repos(conn.installation_id)
+        return [r for r in get_git_host().list_repos(conn.installation_id) if r.full_name in allowed]
     except NeedsReconnect:
         mark_needs_reconnect(conn)
         raise
@@ -120,7 +134,8 @@ def save_settings(conn: GitHubConnection, *, repo: str, base_branch: str, folder
     try:
         repos = {r.full_name: r for r in list_repos(conn)}
         if repo not in repos:
-            raise ConnectError("Luka can't see that repository. Grant it access on GitHub first.")
+            raise ConnectError("Luka can't use that repository: grant the app access to it, and make sure "
+                               "your GitHub account can push to it, then reconnect.")
         conn.repo, conn.base_branch = repo, base_branch
         refresh_base_branch(conn)
     except GitHostError as exc:

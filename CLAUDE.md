@@ -18,8 +18,27 @@ Working agreement for this repo. The approved plan follows below; keep it up to 
 
 ## Deployment and threat model
 
-- **Production is a Mac mini on the operator's private (home) network, not Render.** It runs Docker Compose behind Caddy. The host side lives in the separate `mini-infra` repo: the compose file, the host proxy that routes `/api`, `/admin` and `/static` to Django, and the production env files. This repo provides the images (`backend/Dockerfile`, `frontend/Dockerfile.prod`).
+- **Production is a Mac mini on the operator's private (home) network, not Render.** It runs Docker Compose (via OrbStack) at `www.tryluka.co`; the apex redirects to www. The first deploy there is still pending. The host side lives in the separate [`jjacosta37/mini-infra`](https://github.com/jjacosta37/mini-infra) repo; this repo only provides the images.
+
+  | Here (`growthaiorg`) | In `mini-infra` |
+  |---|---|
+  | `backend/Dockerfile` (gunicorn; collectstatic runs at build) | `projects/luka/compose.yml`: web, migrate, celery-worker, celery-beat, frontend, db (Postgres 17), redis |
+  | `frontend/Dockerfile.prod` + `frontend/Caddyfile.prod` (built SPA on :80) | `edge/caddy/sites/luka.caddy`: sends `/api/*`, `/admin*`, `/static/*` to Django, the rest to the SPA |
+  | `docker-compose.yml` (**local dev only**) | `scripts/deploy`, `scripts/db`, nightly backups; secrets in `~/srv/secrets/luka.env` on the mini |
+
+- **Request path:** Cloudflare (DNS, TLS, WAF) → Cloudflare Tunnel → edge Caddy (plain HTTP) → `web:8000` or `frontend:80`. It is one origin, so the SPA calls `/api` with no CORS, the same as in dev.
 - **`render.yaml` and the Render notes in the README are legacy.** Nothing is deployed from them. Don't extend them, and don't design anything around Render features such as rewrites, `RENDER_*` env vars or managed Postgres.
+- **How a deploy works:** there is no CI. The owner runs `scripts/deploy luka` on the mini. It checks out `origin/main`, builds both images tagged with the commit, dumps the database, runs `migrate` then `bootstrap` as a one-shot, starts the new version with `up --wait`, and rolls back if a healthcheck fails. So **merging to `main` is what ships**, the next time someone deploys.
+- **Contracts the production setup relies on** (changing one means a matching change in `mini-infra`):
+  - Build contexts are `backend/` (default `Dockerfile`) and `frontend/` (`Dockerfile.prod`).
+  - The backend serves on port **8000**, and `/api/health/` must return 200 for `Host: www.tryluka.co` without redirecting to HTTPS (the healthcheck). The frontend serves on **80**, and `GET /` must return 200.
+  - Celery app is `config`; worker and beat run from the backend image. A new queue or a new long-running service needs the compose file updated.
+  - `manage.py bootstrap` stays idempotent: it runs on every deploy.
+  - `SECURE_PROXY_SSL_HEADER` trusts `X-Forwarded-Proto`, since TLS ends at Cloudflare.
+  - A new URL prefix that Django must serve (beyond `/api`, `/admin`, `/static`) needs a Caddy route, or the SPA swallows it.
+  - A **new environment variable** has to be added to the secrets file on the mini before the deploy that needs it. Say so in the PR; the owner does it by hand.
+  - Cloudflare cuts proxied requests at **100 s**. Long work belongs in Celery, not in a request.
+  - Images are built from a clean clone, so gitignored local files never reach them.
 - **What hosting at home means for code:**
   - The server's network is a home LAN. Anything the worker can be made to fetch can reach the router, other devices and services on the Mac itself.
   - Every outbound request leaves from the operator's residential IP. A request to a host a tenant chooses reveals that IP, and the traffic is attributed to the operator. This is a known issue that scans flag as MEDIUM. Fixing it isn't required for now; it will be fixed later with an egress proxy or relay (`docs/security-patterns.md` §6 and §14 "Accepted risks"). The SSRF rules are not relaxed.
@@ -132,42 +151,6 @@ A pipeline inherits three things for free: `running()` gives it a LangSmith span
 - **Report what was considered, not only what was produced.** A step that filters says what it dropped and why: a per-key breakdown that reports an explicit `0` for a configured key that returned nothing (`by_subreddit`), and a distribution plus a capped top-N for a scoring pass (`report_scores` in `apps/reddit/pipeline.py`). "Nothing came back" is a fact, and it has to be a reported one.
 - **A step both paths can reach is reported from one shared function**, so a batched run is not second-class in the trail.
 - **`data` is JSON, and identifiers only.** `Decimal` is not serialisable — convert at the boundary, as `record_external` does. Ids, counts, scores, durations and costs, yes; crawled text, draft bodies, post bodies, no. Model rationale (a relevance `reason`) is truncated, because the full text is already on the row. This is the "log identifiers, never content" rule above, and `data` is not an exception to it.
-
-## Production (Mac mini)
-
-Production runs on a Mac mini (Docker via OrbStack) at `www.tryluka.co`; the apex redirects to
-www. The first deploy there is still pending, and `render.yaml` and the Render notes below
-predate it. Hosting config lives in a separate repo,
-[`jjacosta37/mini-infra`](https://github.com/jjacosta37/mini-infra); this repo only owns the images.
-
-| Here (`growthaiorg`) | In `mini-infra` |
-|---|---|
-| `backend/Dockerfile` (gunicorn; collectstatic runs at build) | `projects/luka/compose.yml`: web, migrate, celery-worker, celery-beat, frontend, db (Postgres 17), redis |
-| `frontend/Dockerfile.prod` + `frontend/Caddyfile.prod` (built SPA on :80) | `edge/caddy/sites/luka.caddy`: sends `/api/*`, `/admin*`, `/static/*` to Django, the rest to the SPA |
-| `docker-compose.yml` (**local dev only**) | `scripts/deploy`, `scripts/db`, nightly backups; secrets in `~/srv/secrets/luka.env` on the mini |
-
-Request path: Cloudflare (DNS, TLS, WAF) → Cloudflare Tunnel → edge Caddy (plain HTTP) → `web:8000`
-or `frontend:80`. It is one origin, so the SPA calls `/api` with no CORS, the same as in dev.
-
-**How a deploy works:** there is no CI. The owner runs `scripts/deploy luka` on the mini. It
-checks out `origin/main`, builds both images tagged with the commit, dumps the database, runs
-`migrate` then `bootstrap` as a one-shot, starts the new version with `up --wait`, and rolls back
-if a healthcheck fails. So **merging to `main` is what ships**, the next time someone deploys.
-
-**Contracts the production setup relies on** (changing one means a matching change in `mini-infra`):
-- Build contexts are `backend/` (default `Dockerfile`) and `frontend/` (`Dockerfile.prod`).
-- The backend serves on port **8000**, and `/api/health/` must return 200 for `Host: www.tryluka.co`
-  without redirecting to HTTPS (the healthcheck). The frontend serves on **80**, and `GET /` must return 200.
-- Celery app is `config`; worker and beat run from the backend image. A new queue or a new
-  long-running service needs the compose file updated.
-- `manage.py bootstrap` stays idempotent: it runs on every deploy.
-- `SECURE_PROXY_SSL_HEADER` trusts `X-Forwarded-Proto`, since TLS ends at Cloudflare.
-- A new URL prefix that Django must serve (beyond `/api`, `/admin`, `/static`) needs a Caddy route,
-  or the SPA swallows it.
-- A **new environment variable** has to be added to the secrets file on the mini before the
-  deploy that needs it. Say so in the PR; the owner does it by hand.
-- Cloudflare cuts proxied requests at **100 s**. Long work belongs in Celery, not in a request.
-- Images are built from a clean clone, so gitignored local files never reach them.
 
 # Luka — implementation plan
 

@@ -2,7 +2,7 @@
 title: Blog posts as GitHub pull requests
 status: shipped
 prd: docs/prds/0002-github-blog-prs.md
-prs: []
+prs: [18]
 updated: 2026-10-15
 ---
 # Blog posts as GitHub pull requests
@@ -220,4 +220,4 @@ Other limits:
 | UI | `frontend/src/features/settings/GitHubCard.tsx`, `frontend/src/features/inbox/PullRequestCard.tsx` |
 
 ## History
-- 2026-10-15 · First version.
+- 2026-10-15 · #18 · First version.

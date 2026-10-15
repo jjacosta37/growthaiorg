@@ -25,7 +25,8 @@ export type RunKind =
   | "content"
   | "x"
   | "regenerate_draft"
-  | "digest_feedback";
+  | "digest_feedback"
+  | "publish_pr";
 export type RunTrigger = "scheduled" | "manual";
 export type RunStatus =
   | "queued"
@@ -257,6 +258,8 @@ export interface DraftModelOption {
   label: string;
 }
 
+export type PublishMode = "manual" | "automatic";
+
 /** /api/agents/ and /api/agents/<type>/ */
 export interface AgentSummary<T extends AgentType = AgentType> {
   agent_type: T;
@@ -264,7 +267,10 @@ export interface AgentSummary<T extends AgentType = AgentType> {
   enabled: boolean;
   cron: string;
   config: AgentConfigFor<T>;
-  publish_mode: "manual";
+  /** "automatic" (Content Agent only) also opens a GitHub pull request for each unflagged post. */
+  publish_mode: PublishMode;
+  /** Whether "automatic" can be chosen: the Content Agent with a ready GitHub connection. */
+  automatic_available: boolean;
   /** Key of the model this agent drafts with; one of `draft_models`. */
   draft_model: string;
   /** The drafting models this project may pick, in display order. */
@@ -391,6 +397,73 @@ export interface DraftDetail extends DraftListItem {
   dismiss_reason: DismissReason;
   dismiss_note: string;
   feedback: DraftFeedback[];
+  /** Blog posts only, and only once GitHub is connected or a PR exists. */
+  pull_request: DraftPullRequest | null;
+}
+
+/* ---------------------------------------------------------------- github */
+
+export type PullRequestState = "held" | "pending" | "open" | "failed";
+
+export interface DraftPullRequest {
+  state: PullRequestState | null;
+  number: number | null;
+  url: string;
+  repo: string;
+  /** Why it was held, or why the last create or update failed. */
+  note: string;
+  /** A create or update is queued or running. */
+  busy: boolean;
+  can_create: boolean;
+  /** The draft changed since it was last pushed to the PR. */
+  needs_update: boolean;
+  can_update: boolean;
+}
+
+export type GitHubConnectionStatus = "incomplete" | "ready" | "needs_reconnect";
+export type FrontmatterField = "title" | "description" | "slug" | "keywords" | "date";
+
+export interface ConstantField {
+  key: string;
+  value: string | number | boolean;
+}
+
+export interface GitHubConnection {
+  status: GitHubConnectionStatus;
+  account: string;
+  repo: string;
+  base_branch: string;
+  base_branch_protected: boolean;
+  folder: string;
+  field_names: Record<FrontmatterField, string>;
+  constant_fields: ConstantField[];
+}
+
+/** /api/github/ */
+export interface GitHubStatus {
+  /** This Luka server has a GitHub App configured. */
+  available: boolean;
+  connection: GitHubConnection | null;
+  standard_fields: FrontmatterField[];
+}
+
+export interface GitHubRepo {
+  full_name: string;
+  default_branch: string;
+}
+
+export interface GitHubSettingsInput {
+  repo: string;
+  base_branch: string;
+  folder: string;
+  field_names: Partial<Record<FrontmatterField, string>>;
+  constant_fields: ConstantField[];
+}
+
+export interface FrontmatterPreview {
+  path: string;
+  frontmatter: string;
+  from_draft: number | null;
 }
 
 /* --------------------------------------------------------------- feedback */

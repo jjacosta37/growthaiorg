@@ -175,6 +175,9 @@
 .blog__panel {
   position: sticky;
   top: calc(var(--space-6) + 40px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 /* Feedback on a draft: thumbs up / down. */

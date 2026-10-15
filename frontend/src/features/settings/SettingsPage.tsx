@@ -1,5 +1,5 @@
 /**
- * Settings: the content policy, account and theme.
+ * Settings: the content policy, GitHub pull requests, account and theme.
  * From "Luka - Settings.dc.html".
  *
  * Switching an industry pack previews the incoming rules and asks for confirmation
@@ -22,6 +22,7 @@ import { ApiError } from "../../lib/api";
 import { useApplyPack, useLogout, usePolicy, usePolicyPacks, useUpdatePolicy } from "../../lib/queries";
 import { useTheme, type Theme } from "../../lib/theme";
 import type { PolicyRule } from "../../lib/types";
+import { GitHubCard } from "./GitHubCard";
 import "./settings.css";
 
 export default function SettingsPage() {
@@ -82,6 +83,8 @@ export default function SettingsPage() {
 
         {data && <RulesCard rules={data.rules} />}
         {data && <DisclosureCard />}
+
+        <GitHubCard />
 
         <AccountCard />
       </div>

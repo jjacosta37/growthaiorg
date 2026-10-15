@@ -11,9 +11,12 @@ import {
   Textarea,
 } from "../../components/primitives";
 import type { BlogPostContent, DraftDetail } from "../../lib/types";
+import { PullRequestCard } from "./PullRequestCard";
 
 const TITLE_GUIDE = 60;
 const META_LIMIT = 160;
+// The server's rule (apps/inbox/content.py): the slug names the post's file.
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function BlogRenderer({
   draft,
@@ -62,6 +65,7 @@ export function BlogRenderer({
       </article>
 
       <aside className="blog__panel">
+        <PullRequestCard draft={draft} />
         <div className="card">
           <div className="card__header">
             <span className="card__title">SEO</span>
@@ -94,9 +98,22 @@ export function BlogRenderer({
               <CharCounter count={content.meta_description.length} limit={META_LIMIT} />
             </Field>
 
-            <Field label="Slug">
+            <Field
+              label="Slug"
+              hint="Names the post's file and URL"
+              error={
+                editing && !SLUG_PATTERN.test(content.slug)
+                  ? "Lowercase letters and numbers, separated by single hyphens"
+                  : undefined
+              }
+            >
               {editing ? (
-                <TextInput mono value={content.slug} onChange={(e) => set("slug", e.target.value)} />
+                <TextInput
+                  mono
+                  invalid={!SLUG_PATTERN.test(content.slug)}
+                  value={content.slug}
+                  onChange={(e) => set("slug", e.target.value)}
+                />
               ) : (
                 <div className="mono subtle">{content.slug}</div>
               )}

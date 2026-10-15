@@ -17,7 +17,7 @@ import {
   useToast,
 } from "../../components/feedback";
 import { Button, Field, Select, TextInput, Textarea, Toggle } from "../../components/primitives";
-import { ApiError } from "../../lib/api";
+import { ApiError, summarise } from "../../lib/api";
 import { DISMISS_REASON_LABEL, KIND_LABEL, dateTime, relative } from "../../lib/format";
 import {
   useDismissDraft,
@@ -224,7 +224,9 @@ export function DraftDetail({ draftId, onDone }: { draftId: number; onDone: () =
                         },
                         onError: (error) =>
                           toast.error(
-                            error instanceof ApiError ? error.detail : "Couldn't save",
+                            error instanceof ApiError
+                              ? summarise(error.fieldErrors) || error.detail
+                              : "Couldn't save",
                           ),
                       })
                     }

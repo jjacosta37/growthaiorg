@@ -201,6 +201,7 @@ render.yaml, .env.example, README.md, CLAUDE.md
 - **DraftVersion**: draft, n, source (ai_initial/ai_regenerated/human_edit), content JSON (validated per kind), nudge, prompt_name/version, model, llm_call FK, created_at. The eval dataset is the last AI version compared with the human-edited or posted version, plus the dismiss reasons.
 - **AgentFeedback** (`apps/feedback/`): project, agent_type, draft/draft_version FKs, source (the feedback box, or a regenerate instruction with "remember" ticked), rating (up/down), text, digested_at. Dismissals are deliberately not used as feedback.
   **AgentLearnings**: one per project and agent: `writing_md` + `selection_md`, source (ai/human). A `digest_feedback` run folds new feedback into it (`prompts/feedback/digest`). The Reddit comment prompt gets the writing learnings plus the undigested entries raw; scoring gets the selection learnings. The Reddit config also carries `guidance` (the user's custom instructions).
+- **GitHubConnection** (`apps/publishing/`, one per project): installation id, repo, base branch, folder, frontmatter field names and constant fields, status (incomplete/ready/needs_reconnect). **DraftPullRequest** (one per draft): state (held/pending/open/failed), branch, file path, PR number and URL, post date, pushed version, note. See `docs/prds/0002-github-blog-prs.md`.
 - **LLMCall**, **LLMBatch** (anthropic_batch_id, status, agent_run, request_count, submitted_at/ended_at), **ApifyRun** (actor_id, apify_run_id, items, cost_usd from `usageTotalUsd`, agent_run).
 
 ## Pipelines
@@ -211,7 +212,7 @@ render.yaml, .env.example, README.md, CLAUDE.md
 - **Regenerate:** a Celery task (with a sync option) that takes the nudge and the previous version and writes a new DraftVersion.
 
 ## API (DRF, session auth, CSRF)
-`/api/auth/{login,logout,me}`, `/api/status`, `/api/project`, `/api/context/docs[/:kind][/regenerate]`, `/api/context/recrawl`, `/api/onboarding/start`, `/api/runs[/:id/events]`, `/api/agents/:type/{config,run-now,runs,skipped}`, `/api/drafts?agent=&status=&sort=` plus `/:id/{edit,regenerate,mark-posted,dismiss,read}`, `/api/stats`. Schema generated with drf-spectacular, and TS types generated from it with openapi-typescript.
+`/api/auth/{login,logout,me}`, `/api/status`, `/api/project`, `/api/context/docs[/:kind][/regenerate]`, `/api/context/recrawl`, `/api/onboarding/start`, `/api/runs[/:id/events]`, `/api/agents/:type/{config,run-now,runs,skipped}`, `/api/drafts?agent=&status=&sort=` plus `/:id/{edit,regenerate,mark-posted,dismiss,read}`, `/api/stats`, `/api/github/{,connect,callback,repos,connection,preview}`, `/api/drafts/:id/pull-request[/update]`. Schema generated with drf-spectacular, and TS types generated from it with openapi-typescript.
 
 ## Frontend
 Three-pane layout: sidebar (project switcher, Inbox with unread count, per-agent ready counts, Context, Stats, Settings, status line), list (agent and status filters, sort), and a detail pane that switches renderer by `kind`:

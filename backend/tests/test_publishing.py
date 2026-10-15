@@ -471,3 +471,15 @@ def test_the_trail_has_repo_and_pr_number_but_no_content(client, project, conn, 
     for text in ("Some text.", "A short guide.", CONTENT["title"]):
         assert not any(text in str(e.data) or text in e.message for e in events)
         assert text not in caplog.text
+
+
+def test_the_callback_falls_back_to_the_state_kept_in_the_session(client, project, gh):
+    client.post("/api/github/connect/")
+    resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1, "setup_action": "install"})
+    assert "github=connected" in resp["Location"]
+    assert GitHubConnection.objects.filter(project=project).exists()
+
+
+def test_without_any_state_nothing_is_saved(client, project, gh):
+    resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1})
+    assert "github=error" in resp["Location"] and not GitHubConnection.objects.exists()

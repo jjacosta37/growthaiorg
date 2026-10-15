@@ -153,6 +153,85 @@ cd backend && ../.venv/bin/pytest
 | `ENVIRONMENT` | Tags reported errors (`dev`, `production`) |
 | `SENTRY_LOCAL_VARIABLES` | Include frame locals in tracebacks. Off by default: locals can hold crawled page text and draft bodies |
 | `LOG_LEVEL` | Root logger level (default `INFO`) |
+| `GIT_HOST` | `github` (default) or `fake`: an in-memory GitHub for local dev, one per process |
+| `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID` | The Luka GitHub App (see "GitHub pull requests" below) |
+| `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_SECRET` | The app's secrets. Never commit them |
+| `LUKA_APP_URL` | Where users reach Luka, e.g. `https://luka.example.com`. GitHub sends users back here, and PR descriptions link to drafts from here |
+
+## GitHub pull requests (blog posts)
+
+The Content Agent can open each blog post as a pull request in the project's own repository
+(`docs/prds/0002-github-blog-prs.md`). It does this through **one GitHub App per Luka
+deployment**. Every customer installs that app on the repositories they choose. Luka stores
+only the installation id. It mints tokens that last an hour at most, narrowed to one
+repository and the permissions the step needs, and never stores them.
+
+### Register the app (once per deployment)
+
+1. On GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**. To own it
+   as an organisation, use the organisation's settings instead.
+2. **Name:** for example `Luka` (its URL slug becomes `GITHUB_APP_SLUG`). **Homepage URL:** your
+   `LUKA_APP_URL`.
+3. **Identifying and authorizing users:**
+   - **Callback URL:** `<LUKA_APP_URL>/api/github/callback/`
+   - Tick **Request user authorization (OAuth) during installation.** Luka uses this one-time
+     authorisation to check that the installation really belongs to the person connecting. Then
+     it discards the token.
+   - Leave **Expire user authorization tokens** ticked.
+4. **Post installation:**
+   - **Setup URL:** the same `<LUKA_APP_URL>/api/github/callback/`
+   - Tick **Redirect on update**, so changing repository access on GitHub comes back to Luka.
+5. **Webhook:** untick **Active**. Luka doesn't receive webhooks.
+6. **Repository permissions.** Set these and nothing else:
+
+   | Permission | Access | Why |
+   |---|---|---|
+   | Contents | Read and write | Create the `luka/…` branch and commit the post's file to it. Check the base branch and that no file with the same name exists there. |
+   | Pull requests | Read and write | Open the PR, refresh its description on "Update PR", and find an existing PR on retry. |
+   | Metadata | Read-only | Required by GitHub (listing repositories and branches). |
+
+   Leave **Workflows**, **Administration** and every organisation and account permission at
+   *No access*. Without Workflows, GitHub itself stops the app from touching
+   `.github/workflows/`.
+7. **Where can this GitHub App be installed?** Choose *Only on this account* while testing, and
+   *Any account* when customers connect their own repositories.
+8. Create the app, then on its page:
+   - note the **App ID** and **Client ID**
+   - **Generate a new client secret**
+   - **Generate a private key** (a `.pem` file downloads)
+9. Put the values in the server's env file (never in this repo):
+   ```
+   GIT_HOST=github
+   GITHUB_APP_ID=123456
+   GITHUB_APP_SLUG=luka
+   GITHUB_APP_CLIENT_ID=Iv23li...
+   GITHUB_APP_CLIENT_SECRET=...
+   GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
+   LUKA_APP_URL=https://luka.example.com
+   ```
+   The private key can be one line with `\n` for line breaks, as above. Restart web and worker.
+
+### What customers do
+
+1. In Luka, **Settings → GitHub pull requests → Connect GitHub.** GitHub's install screen opens.
+   Pick **Only select repositories** and choose the blog's repository.
+2. Back in Luka, choose the repository, the base branch (where the site deploys from) and the
+   folder for posts. Rename frontmatter fields or add constant ones if the site needs them;
+   the preview shows the header a post will get. Save.
+3. **Protect the base branch on GitHub** (Settings → Branches, or a ruleset that requires a
+   pull request with an approval). Luka only ever writes to its own `luka/…` branches and never
+   merges, but GitHub can't restrict an app to that, so branch protection is what makes GitHub
+   enforce it too. Luka shows a warning while the base branch is unprotected.
+4. Optional: on the Content Agent's page, set **Pull requests** to *Automatic*. Every post
+   without flags is then opened as a PR when it's written. Flagged posts wait in the inbox.
+
+To revoke access completely, uninstall the app on GitHub. **Disconnect** in Luka only stops
+new PRs.
+
+### Rotating the key
+
+GitHub allows two private keys at once. Generate a new one, deploy it, then delete the old one
+on the app's page.
 
 ## Error reporting
 

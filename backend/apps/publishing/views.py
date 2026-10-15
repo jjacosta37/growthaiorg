@@ -28,6 +28,8 @@ from .frontmatter import SAMPLE_POST, STANDARD_FIELDS, FrontmatterSettings, clea
 from .host import github_configured
 from .models import GitHubConnection
 
+SESSION_STATE_KEY = "github_connect_state"
+
 
 def connection_data(conn: GitHubConnection | None) -> dict | None:
     if conn is None:
@@ -75,6 +77,9 @@ class ConnectView(APIView):
         if not github_configured():
             return Response({"detail": "GitHub isn't set up on this Luka server"}, status=status.HTTP_409_CONFLICT)
         state = connections.connect_state(request.user.pk, current_project(request))
+        # Also kept in the session: when the app asks for user authorisation during install,
+        # GitHub may come back to the callback without echoing `state`.
+        request.session[SESSION_STATE_KEY] = state
         return Response({"url": get_git_host().install_url(state)})
 
 
@@ -101,8 +106,9 @@ class CallbackView(APIView):
             return self._back(result="requested")  # an organisation owner must approve the install
         if "installation_id" not in v:
             return self._back(error="GitHub didn't say which installation to use. Try connecting again.")
+        state = v["state"] or request.session.pop(SESSION_STATE_KEY, "")
         try:
-            connections.complete_install(request.user, v["state"], v["code"], v["installation_id"])
+            connections.complete_install(request.user, state, v["code"], v["installation_id"])
         except connections.ConnectError as exc:
             return self._back(error=str(exc))
         return self._back(result="connected")

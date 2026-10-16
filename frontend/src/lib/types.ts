@@ -260,12 +260,42 @@ export interface DraftModelOption {
 
 export type PublishMode = "manual" | "automatic";
 
+/**
+ * An agent schedule, in the project's local time. Times are "HH:MM" (24h) and days are
+ * 0 = Sunday … 6 = Saturday. `custom` is a cron saved before the builder: it shows and keeps
+ * running, but the API refuses to save one.
+ */
+export type Schedule =
+  | { kind: "every_hours"; hours: 1 | 2 | 3 | 4 | 6 | 8 | 12; minute: number }
+  | { kind: "daily"; times: string[] }
+  | { kind: "weekdays"; days: number[]; times: string[] }
+  | { kind: "weekly"; day: number; time: string }
+  | { kind: "monthly"; day: number; time: string }
+  | { kind: "custom"; cron: string };
+
+export type ScheduleKind = Schedule["kind"];
+
+/** /api/agents/schedule-preview/ */
+export interface SchedulePreview {
+  summary: string;
+  next_runs: string[];
+}
+
 /** /api/agents/ and /api/agents/<type>/ */
 export interface AgentSummary<T extends AgentType = AgentType> {
   agent_type: T;
   label: string;
   enabled: boolean;
-  cron: string;
+  schedule: Schedule;
+  /** Plain words naming the timezone, e.g. "Weekdays at 9:00am (Europe/Madrid)". */
+  schedule_summary: string;
+  /** The next 3 runs, ISO. */
+  next_runs: string[];
+  /** "too_frequent": a schedule saved before the hourly minimum; it runs until replaced. */
+  schedule_warning: "too_frequent" | null;
+  /** The project's timezone (UTC until one is chosen); shared by all its agents. */
+  timezone: string;
+  timezone_set: boolean;
   config: AgentConfigFor<T>;
   /** "automatic" (Content Agent only) also opens a GitHub pull request for each unflagged post. */
   publish_mode: PublishMode;

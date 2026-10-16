@@ -9,5 +9,5 @@ register(AgentSpec(
     config_model=XAgentConfig,
     run=run_x_agent,
     regenerate=regenerate,
-    default_cron="0 14 * * 1-5",  # weekdays 14:00 UTC
+    default_schedule={"kind": "weekdays", "days": [1, 2, 3, 4, 5], "times": ["14:00"]},
 ))

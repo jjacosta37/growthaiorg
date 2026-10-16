@@ -183,69 +183,19 @@ export function runSummary(kind: string, stats: RunStats | null | undefined): st
 
 /* ---------------------------------------------------------------- schedule */
 
-/**
- * Cron in plain words. The designs show a phrase with the raw expression behind an
- * "advanced" field, so this covers the shapes the schedule editor offers and falls
- * back to the expression itself for anything hand-written.
- */
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-function clockTime(hour: number, minute: number): string {
-  const suffix = hour < 12 ? "am" : "pm";
-  const h = hour % 12 === 0 ? 12 : hour % 12;
-  return minute === 0 ? `${h}${suffix}` : `${h}:${String(minute).padStart(2, "0")}${suffix}`;
-}
-
-export function cronToPhrase(cron: string): string | null {
-  const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) return null;
-  const [min, hour, dom, mon, dow] = parts as [string, string, string, string, string];
-  if (dom !== "*" || mon !== "*") return null;
-
-  const minute = Number(min);
-  if (!Number.isInteger(minute)) return null;
-
-  // Every hour: "0 * * * *", and every N hours: "0 */4 * * *"
-  if (dow === "*") {
-    if (hour === "*") return "Every hour";
-    const everyHours = /^\*\/(\d+)$/.exec(hour);
-    if (everyHours) {
-      const n = Number(everyHours[1]);
-      return n === 1 ? "Every hour" : `Every ${n} hours`;
-    }
-  }
-
-  const hourNum = Number(hour);
-  if (!Number.isInteger(hourNum)) return null;
-  const at = clockTime(hourNum, minute);
-
-  if (dow === "*") return `Every day at ${at}`;
-  if (dow === "1-5") return `Weekdays at ${at}`;
-  if (dow === "0,6" || dow === "6,0") return `Weekends at ${at}`;
-
-  const dowNum = Number(dow);
-  if (Number.isInteger(dowNum) && dowNum >= 0 && dowNum <= 6) {
-    return `${DAY_NAMES[dowNum]}s at ${at}`;
-  }
-  return null;
-}
-
-/** The phrase, or the raw expression when it isn't one of the common shapes. */
-export function scheduleLabel(cron: string): string {
-  return cronToPhrase(cron) ?? cron;
-}
-
-/** The options the plain-words schedule picker offers. */
-export const SCHEDULE_PRESETS: { cron: string; label: string }[] = [
-  { cron: "0 * * * *", label: "Every hour" },
-  { cron: "0 */4 * * *", label: "Every 4 hours" },
-  { cron: "0 */12 * * *", label: "Every 12 hours" },
-  { cron: "0 9 * * *", label: "Every day at 9am" },
-  { cron: "0 14 * * 1-5", label: "Weekdays at 2pm" },
-  { cron: "0 9 * * 1", label: "Mondays at 9am" },
-];
-
-/** Rough validation so the advanced field can refuse obvious nonsense before saving. */
-export function looksLikeCron(value: string): boolean {
-  return value.trim().split(/\s+/).length === 5;
+/** A run time as the project sees it, e.g. "Mon 19 Oct, 9:00am", in an IANA zone. */
+export function formatInZone(iso: string, timeZone: string): string {
+  const date = new Date(iso);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone,
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  const time = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone })
+    .format(date)
+    .replace(/\s/g, "")
+    .toLowerCase();
+  return `${part("weekday")} ${part("day")} ${part("month")}, ${time}`;
 }

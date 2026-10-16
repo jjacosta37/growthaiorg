@@ -49,6 +49,8 @@ import type {
   GitHubStatus,
   GitHubConnection,
   PublishMode,
+  Schedule,
+  SchedulePreview,
 } from "./types";
 import { isRunActive } from "./types";
 
@@ -276,7 +278,9 @@ export function useUpdateAgent<T extends AgentType>(type: T) {
   return useMutation({
     mutationFn: (body: {
       enabled?: boolean;
-      cron?: string;
+      schedule?: Schedule;
+      /** The project's timezone; changing it moves every agent, keeping local times. */
+      timezone?: string;
       config?: unknown;
       draft_model?: string;
       publish_mode?: PublishMode;
@@ -284,10 +288,19 @@ export function useUpdateAgent<T extends AgentType>(type: T) {
       api.patch<AgentSummary<T>>(`/agents/${type}/`, body),
     onSuccess: (agent) => {
       qc.setQueryData(keys.agent(type), agent);
+      // Prefix match: also refreshes the other agents, which a timezone change moves too.
       void qc.invalidateQueries({ queryKey: keys.agents });
       // The backlog's default order follows the Content Agent's opportunity weights.
       if (type === "content") invalidateTopics(qc);
     },
+  });
+}
+
+/** Summary and next runs of an unsaved schedule; writes nothing. */
+export function useSchedulePreview() {
+  return useMutation({
+    mutationFn: (body: { schedule: Schedule; timezone: string }) =>
+      api.post<SchedulePreview>("/agents/schedule-preview/", body),
   });
 }
 

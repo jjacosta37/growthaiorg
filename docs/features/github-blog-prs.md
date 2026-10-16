@@ -3,7 +3,7 @@ title: Blog posts as GitHub pull requests
 status: shipped
 prd: docs/prds/0002-github-blog-prs.md
 prs: [18]
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 # Blog posts as GitHub pull requests
 
@@ -217,3 +217,4 @@ Other limits:
 
 ## History
 - 2026-10-15 · #18 · First version.
+- 2026-10-16 · Connecting requires `state` in GitHub's return URL; the session fallback is removed, since the registered app showed GitHub sends it back.

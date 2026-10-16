@@ -234,7 +234,7 @@ Per-project `ContentAgentConfig` fields:
   - `RedditPost.url` scheme: checked on write and on read, everywhere a post link is rendered
   - untyped requested-topic keywords
   - the model deciding how many blog topics are saved
-- **Deferred (§14 Medium 4):** a very frequent Content Agent schedule, with Reddit targets that never yield relevant posts, repeats a Reddit search, its scoring and a keyword lookup on every run. Each run is bounded. The fix is either a minimum interval for agent schedules, or a per-project limit on topic research, which would change AC-14. Not yet decided.
+- **Bounded by the hourly schedule minimum:** a Content Agent schedule with Reddit targets that never yield relevant posts repeats a Reddit search, its scoring and a keyword lookup on every run. Each run is bounded, and since agent schedules can run at most once an hour (`docs/features/friendly-agent-schedules.md`), so is the repetition.
 
 ## Observability
 Everything is in the content run's activity trail (`RunEvent`):
@@ -267,7 +267,7 @@ Everything is in the content run's activity trail (`RunEvent`):
 - **Tests never spend money:** `config.settings.test` clears `APIFY_TOKEN` and forces fake providers.
 
 ## Limitations and follow-ups
-- **Topic research can repeat on a frequent schedule.** See Security, deferred §14 Medium 4.
+- **Topic research can repeat on every run**, at most once an hour. See Security.
 - **The keyword actor is young** (few users, no rating). If it degrades, a DataForSEO adapter is the natural replacement.
 - **The keyword placement check is literal.** It matches the exact phrase, so a natural variant (a plural, a different word order) is flagged.
 - **Search data is never refreshed**, so a topic that waits months shows old numbers.

@@ -9,5 +9,5 @@ register(AgentSpec(
     config_model=RedditAgentConfig,
     run=run_reddit_agent,
     regenerate=regenerate,
-    default_cron="0 */4 * * *",
+    default_schedule={"kind": "every_hours", "hours": 4, "minute": 0},
 ))

@@ -14,7 +14,10 @@ pytestmark = pytest.mark.django_db
 def test_list_agents_with_defaults(client):
     agents = client.get("/api/agents/").json()
     reddit = next(a for a in agents if a["agent_type"] == "reddit")
-    assert reddit["enabled"] is False and reddit["cron"] == "0 */4 * * *"
+    assert reddit["enabled"] is False
+    assert reddit["schedule"] == {"kind": "every_hours", "hours": 4, "minute": 0}
+    assert reddit["schedule_summary"] == "Every 4 hours (UTC)" and len(reddit["next_runs"]) == 3
+    assert reddit["timezone"] == "UTC" and reddit["timezone_set"] is False and reddit["schedule_warning"] is None
     assert reddit["config"]["relevance_threshold"] == 70 and reddit["config"]["subreddits"] == []
     assert reddit["next_run_at"] is None and reddit["last_run"] is None and reddit["ready"] == 0
 
@@ -23,10 +26,10 @@ def test_patch_config_validates_merges_and_schedules(client, project):
     configure(project)
     resp = client.patch("/api/agents/reddit/", {"config": {"relevance_threshold": 150}}, format="json")
     assert resp.status_code == 400
-    assert client.patch("/api/agents/reddit/", {"cron": "every hour"}, format="json").status_code == 400
+    assert client.patch("/api/agents/reddit/", {"schedule": {"kind": "hourly"}}, format="json").status_code == 400
 
     resp = client.patch("/api/agents/reddit/", {
-        "enabled": True, "cron": "15 */3 * * *",
+        "enabled": True, "schedule": {"kind": "every_hours", "hours": 3, "minute": 15},
         "config": {"relevance_threshold": 60, "subreddits": ["r/productivity", "productivity", " startups "]},
     }, format="json")
     assert resp.status_code == 200, resp.json()
@@ -87,6 +90,8 @@ def test_custom_validator_errors_return_400_not_500(client):
 def test_configs_created_anywhere_use_the_agents_default_schedule(project):
     from apps.agents.models import AgentConfig
 
-    assert AgentConfig.for_project(project, "reddit").cron == "0 */4 * * *"  # e.g. created by onboarding
-    assert AgentConfig.for_project(project, "content").cron == "0 9 * * 1"
-    assert AgentConfig.for_project(project, "x").cron == "0 14 * * 1-5"
+    # e.g. created by onboarding
+    assert AgentConfig.for_project(project, "reddit").schedule == {"kind": "every_hours", "hours": 4, "minute": 0}
+    assert AgentConfig.for_project(project, "content").schedule == {"kind": "weekly", "day": 1, "time": "09:00"}
+    assert AgentConfig.for_project(project, "x").schedule == {
+        "kind": "weekdays", "days": [1, 2, 3, 4, 5], "times": ["14:00"]}

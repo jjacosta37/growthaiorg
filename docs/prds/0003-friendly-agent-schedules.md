@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Friendly agent schedules
-status: agreed
+status: building
 created: 2026-10-16
 agreed: 2026-10-16
 branch: claude/wonderful-ramanujan-4hgokv

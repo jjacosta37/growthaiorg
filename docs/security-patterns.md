@@ -332,7 +332,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - `posts_per_run`
   - `topics_per_run`
   - the number of subreddits and keywords (Reddit runs one search per pair): at most 20 subreddits in Reddit's name format and 30 keywords of at most 80 characters (`RedditAgentConfig`), and one Reddit search is capped at `APIFY_REDDIT_MAX_ITEMS` results (pay-per-result) and `APIFY_REDDIT_MAX_CHARGE_USD` (pay-per-event)
-  - a Content Agent run can also trigger that Reddit search, for topic research, but only when the project has no unused relevant posts; it uses the Reddit Agent's own limits and drafts no replies. Until agent cron has a minimum interval (§14 Medium 4), the Content Agent's schedule multiplies this Apify and scoring spend too
+  - a Content Agent run can also trigger that Reddit search, for topic research, but only when the project has no unused relevant posts; it uses the Reddit Agent's own limits and drafts no replies. The Content Agent's schedule multiplies this spend, at most once an hour (see "Schedules" below)
   - keyword lookups: at most `KEYWORD_LOOKUPS_PER_RUN` (50) keywords per content run and `APIFY_KEYWORD_MAX_CHARGE_USD` per call; a topic is looked up once and never refreshed
   - the Reddit posts sent to the topics prompt: at most 60, each body cut to 500 characters
   - `web_search_max_uses`
@@ -340,7 +340,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - the drafting model: a per-agent choice (`AgentConfig.draft_model`) that changes the price of each drafting call, not the number of calls. Opus costs about 2× Sonnet per draft. The bound is an allowlist: PATCH accepts only a key that `available_draft_models(project)` returns (`apps/agents/draft_models.py`), never a model ID, and it only affects writer-tier drafting prompts
   - GitHub pull requests: no spend, and bounded by drafts (at most `drafts_per_run` automatic PRs per content run, one PR per draft); the API refuses a second create or update while one is queued for the draft. Each step makes a few API calls with tokens narrowed to the one repository
   - feedback digests: one active digest per project (rebuild returns 409 while one runs), new feedback waits `FEEDBACK_DIGEST_DELAY_SECONDS` so a burst is one call, at most 100 entries per digest, and at most 20 undigested entries passed to a drafting call
-- **Schedules:** an agent cron must not be able to fire more often than a sensible minimum.
+- **Schedules:** an agent may run at most once an hour. Schedules are saved only as builder choices (`apps/agents/schedule.py`), which can't be closer than an hour apart; the API refuses raw cron (`custom`), so a sub-hourly schedule can't be saved by any route. A sub-hourly cron saved before the builder keeps running, flagged on its agent page, until someone replaces it. A new way to schedule a run must keep this bound.
 - **"Run now" and regenerate** refuse to start while a run of the same kind is active (the 409 path). Keep that guard on any new trigger.
 - **Unbounded spend** that a single tenant can trigger is **High**. A bounded but generous limit is Medium at most.
 
@@ -406,22 +406,21 @@ These are issues already in `main`. A branch scan does not report them again, **
 1. The login view has no throttle or lockout, and `AUTH_PASSWORD_VALIDATORS` isn't set. With a public login page this is the first thing to fix after the Criticals and Highs.
 2. **Login CSRF** (`apps/core/views.py` `LoginView`). DRF exempts unauthenticated POSTs from CSRF, and `FormParser` is enabled. A cross-site form can sign a visitor into an attacker's account, and whatever the visitor then enters ends up there. It was Low while accounts were invite-only; the §1 threat model raises it.
 3. `/admin/` is reachable through the host proxy, with no IP allowlist, 2FA or separate throttle. Restrict it to the private network or a VPN, or put it behind its own auth.
-4. There's no minimum interval for agent cron; `* * * * *` is accepted (§11). Since topic research, a frequent Content Agent schedule with Reddit targets that never yield relevant posts also repeats a Reddit search, its scoring and a keyword lookup on every run.
-5. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7). The seeded values are filtered to the config's limits, so the spend is bounded, but no human confirms them before the first run.
-6. **No size caps on tenant text rendered into every LLM call:**
+4. Model output seeds the Reddit agent's subreddits and keywords when they are empty. That drives future Apify spend (§7). The seeded values are filtered to the config's limits, so the spend is bounded, but no human confirms them before the first run.
+5. **No size caps on tenant text rendered into every LLM call:**
    - policy rules and `blog_disclaimer` (`apps/policy/views.py`)
    - context-doc `content_md` (`apps/context/serializers.py`)
    - `competitors` (`apps/core/serializers.py`)
 
    This is a bounded spend multiplier.
-7. `SECURE_HSTS_SECONDS` defaults to 0. There's no CSP, and `frontend/Caddyfile.prod` adds no security headers to the SPA's HTML (§12).
-8. The waitlist throttle is keyed on the whole `X-Forwarded-For` header (`NUM_PROXIES` unset) and uses per-process LocMem cache.
-9. Crawled text sits in the system prompt with unescaped `url`/`title` attributes under "Treat these as ground truth."
-10. Markdown renders remote images, which a model-written doc could use as a beacon. That leaks the *viewer's* IP to whoever controls the image URL.
-11. **Unvalidated input causes 500s:**
+6. `SECURE_HSTS_SECONDS` defaults to 0. There's no CSP, and `frontend/Caddyfile.prod` adds no security headers to the SPA's HTML (§12).
+7. The waitlist throttle is keyed on the whole `X-Forwarded-For` header (`NUM_PROXIES` unset) and uses per-process LocMem cache.
+8. Crawled text sits in the system prompt with unescaped `url`/`title` attributes under "Treat these as ground truth."
+9. Markdown renders remote images, which a model-written doc could use as a beacon. That leaks the *viewer's* IP to whoever controls the image URL.
+10. **Unvalidated input causes 500s:**
     - query params: `agents/views.py` `int(after)`, `agents/api.py` `int(min_score)` and `run_id`
     - untyped `JSONField`: `EditSerializer.content`
-12. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
+11. **Missing tenancy tests.** `tests/test_tenancy.py` has no cases for:
     - skipped posts
     - policy (GET, PATCH, apply-pack)
     - context pages, revisions and regenerate
@@ -429,7 +428,7 @@ These are issues already in `main`. A branch scan does not report them again, **
 
     The code is scoped correctly today.
 
-13. **The GitHub App's private key reaches every installed repository** (PRD 0002). GitHub's Contents: write can't be limited to a folder or branch prefix. Anyone holding `GITHUB_APP_PRIVATE_KEY` could therefore push to any **unprotected** branch of every repository customers granted. The key lives in the mini's env file like the other secrets (§4), and Luka's code writes only to `luka/` branches. Mitigations: customers protect their base branch, and Luka warns until they do; installs on selected repositories only; the key can be rotated (GitHub allows two at once). Options that need no write access are in `docs/backlog.md`.
+12. **The GitHub App's private key reaches every installed repository** (PRD 0002). GitHub's Contents: write can't be limited to a folder or branch prefix. Anyone holding `GITHUB_APP_PRIVATE_KEY` could therefore push to any **unprotected** branch of every repository customers granted. The key lives in the mini's env file like the other secrets (§4), and Luka's code writes only to `luka/` branches. Mitigations: customers protect their base branch, and Luka warns until they do; installs on selected repositories only; the key can be rotated (GitHub allows two at once). Options that need no write access are in `docs/backlog.md`.
 
 ### Low
 1. The base `SECRET_KEY` default is `dev-insecure-change-me`. Prod requires a real one.

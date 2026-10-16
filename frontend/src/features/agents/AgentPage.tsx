@@ -11,10 +11,10 @@ import { Navigate, useParams } from "react-router-dom";
 import { RunStatusIndicator } from "../../components/badges";
 import { DetailPane } from "../../components/Shell";
 import { Dialog, EmptyState, ErrorState, useToast } from "../../components/feedback";
-import { Button, Field, Select, Toggle } from "../../components/primitives";
+import { Button, Field, Select, Toggle, Tooltip } from "../../components/primitives";
 import { ProgressTimeline } from "../../components/feedback";
 import { ApiError } from "../../lib/api";
-import { AGENT_LABEL, dateTime, relative, runSummary } from "../../lib/format";
+import { AGENT_LABEL, dateTime, formatInZone, relative, runSummary } from "../../lib/format";
 import {
   useAgent,
   useAgentRuns,
@@ -100,7 +100,9 @@ function AgentBody({ type }: { type: AgentType }) {
               {data.next_run_at && data.enabled && (
                 <>
                   <span>·</span>
-                  <span>Next run {relative(data.next_run_at)}</span>
+                  <Tooltip label={formatInZone(data.next_run_at, data.timezone) + ` (${data.timezone})`}>
+                    <span tabIndex={0}>Next run {relative(data.next_run_at)}</span>
+                  </Tooltip>
                 </>
               )}
             </div>
@@ -236,23 +238,7 @@ function AgentBody({ type }: { type: AgentType }) {
             )}
 
             <Field label="Schedule">
-              <ScheduleEditor
-                cron={data.cron}
-                onSave={(cron) =>
-                  update.mutate(
-                    { cron },
-                    {
-                      onSuccess: () => toast.show("Schedule saved"),
-                      onError: (error) =>
-                        toast.error(
-                          error instanceof ApiError
-                            ? error.fieldErrors.cron?.join(" ") || error.detail
-                            : "Couldn't save the schedule",
-                        ),
-                    },
-                  )
-                }
-              />
+              <ScheduleEditor type={type} agent={data} />
             </Field>
           </div>
         </section>

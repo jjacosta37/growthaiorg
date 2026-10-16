@@ -156,8 +156,9 @@ def test_changing_the_timezone_keeps_local_times_for_every_agent(client, project
         assert (task.crontab.hour, task.crontab.timezone.key) == (hour, "Europe/Madrid")
 
 
-def test_unknown_timezone_is_refused(client):
-    resp = client.patch("/api/agents/reddit/", {"timezone": "Mars/Olympus"}, format="json")
+@pytest.mark.parametrize("zone", ["Mars/Olympus", "localtime", "Factory"])
+def test_unknown_timezone_is_refused(client, zone):
+    resp = client.patch("/api/agents/reddit/", {"timezone": zone}, format="json")
     assert resp.status_code == 400 and "timezone" in resp.json()
 
 

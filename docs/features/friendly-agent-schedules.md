@@ -124,6 +124,7 @@ Before this change, an agent's schedule was one of six presets or a raw cron exp
 
 ## Limitations and follow-ups
 - **The app itself isn't usable on a phone yet.** The three-pane shell has a 1024px minimum width (`styles/shell.css`), from before this feature. The schedule editor fits a phone-width column, but the page around it scrolls sideways at phone width. AC-16 was narrowed to the editor for this reason, and the phone layout is a backlog item.
+- **The hour minimum is on the local clock.** On the day clocks spring forward, two times like 01:30 and 03:00 can run 30 minutes apart in real time, once per change. Accepted: bounded, and less than Run now already allows.
 - **An ambiguous local time on a fall-back day** (e.g. 02:30 when clocks go back) is shown once in the preview. Whether beat fires it once or twice is decided by celery's crontab (unverified).
 - **Times of day are free-form minutes, but every-few-hours offers 5-minute steps.** A schedule saved with another minute keeps it and shows it as an extra option.
 

@@ -175,13 +175,17 @@ def _message(error: dict) -> str:
 _KINDS = {"every_hours", "daily", "weekdays", "weekly", "monthly", "custom"}
 
 
+# Files tzdata ships that aren't places: "localtime" would reveal the server's own offset.
+_PSEUDO_ZONES = {"localtime", "Factory"}
+
+
 def valid_timezone(name: str) -> str:
     """An IANA timezone name.
 
     Raises:
         InvalidSchedule: when the name isn't a known zone.
     """
-    if name not in available_timezones():
+    if name in _PSEUDO_ZONES or name not in available_timezones():
         raise InvalidSchedule(f"Unknown timezone {name!r}")
     return name
 

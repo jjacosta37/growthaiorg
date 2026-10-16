@@ -28,8 +28,6 @@ from .frontmatter import SAMPLE_POST, STANDARD_FIELDS, FrontmatterSettings, clea
 from .host import github_configured
 from .models import GitHubConnection
 
-SESSION_STATE_KEY = "github_connect_state"
-
 
 def connection_data(conn: GitHubConnection | None) -> dict | None:
     if conn is None:
@@ -77,9 +75,6 @@ class ConnectView(APIView):
         if not github_configured():
             return Response({"detail": "GitHub isn't set up on this Luka server"}, status=status.HTTP_409_CONFLICT)
         state = connections.connect_state(request.user.pk, current_project(request))
-        # Also kept in the session: when the app asks for user authorisation during install,
-        # GitHub may come back to the callback without echoing `state`.
-        request.session[SESSION_STATE_KEY] = state
         return Response({"url": get_git_host().install_url(state)})
 
 
@@ -97,20 +92,25 @@ class CallbackView(APIView):
 
     @extend_schema(parameters=[CallbackSerializer], responses={302: None})
     def get(self, request: Request) -> HttpResponseRedirect:
-        """Verify and save the installation; the result rides back in `?github=`."""
-        # One use only: the session copy goes on every callback, whatever the outcome.
-        session_state = request.session.pop(SESSION_STATE_KEY, "")
+        """Verify and save the installation; the result rides back in `?github=`.
+
+        `state` must come back in the URL: GitHub returns it on the install round trip that
+        Connect starts. A return without it began on GitHub (installing from the app's page,
+        changing repository access, an owner approving a request), so nothing proves which
+        Luka user and project it is for, and it is refused.
+        """
         data = CallbackSerializer(data=request.query_params)
         if not data.is_valid():
             return self._back(error="bad_request")
         v = data.validated_data
-        state = v["state"] or session_state
         if v["setup_action"] == "request":
             return self._back(result="requested")  # an organisation owner must approve the install
+        if not v["state"]:
+            return self._back(error="no_state")
         if "installation_id" not in v:
             return self._back(error="no_installation")
         try:
-            connections.complete_install(request.user, state, v["code"], v["installation_id"])
+            connections.complete_install(request.user, v["state"], v["code"], v["installation_id"])
         except connections.ConnectError as exc:
             return self._back(error=exc.code)
         return self._back(result="connected")

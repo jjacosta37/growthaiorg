@@ -99,12 +99,14 @@ def test_connect_round_trip_saves_the_installation(client, user, project, gh):
     assert (conn.installation_id, conn.account, conn.status) == (1, "acme", "incomplete")
 
 
-@pytest.mark.parametrize("change", ["bad_state", "not_theirs", "no_code"])
+@pytest.mark.parametrize("change", ["bad_state", "not_theirs", "no_code", "no_state"])
 def test_connect_refuses_tampered_or_foreign_installations(client, project, gh, change):
     state = connections.connect_state(project.owner_id, project)
     params = {"state": state, "code": "c", "installation_id": 1}
     if change == "bad_state":
         params["state"] = state + "x"
+    elif change == "no_state":
+        del params["state"]
     elif change == "not_theirs":
         params["installation_id"] = 999  # GitHub doesn't list it for this user
     else:
@@ -474,16 +476,13 @@ def test_the_trail_has_repo_and_pr_number_but_no_content(client, project, conn, 
         assert text not in caplog.text
 
 
-def test_the_callback_falls_back_to_the_state_kept_in_the_session(client, project, gh):
+def test_a_return_without_state_is_refused_even_right_after_connect(client, project, gh):
+    # GitHub echoes `state` on the install round trip (checked against the real app), so a
+    # return without it didn't start from Connect: nothing ties it to this user and project.
     client.post("/api/github/connect/")
     resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1, "setup_action": "install"})
-    assert "github=connected" in resp["Location"]
-    assert GitHubConnection.objects.filter(project=project).exists()
-
-
-def test_without_any_state_nothing_is_saved(client, project, gh):
-    resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1})
-    assert "github=error" in resp["Location"] and not GitHubConnection.objects.exists()
+    assert "github_error=no_state" in resp["Location"]
+    assert not GitHubConnection.objects.exists()
 
 
 def test_only_repositories_the_user_can_push_to_are_offered_or_saved(client, project, gh):
@@ -509,13 +508,6 @@ def test_an_installation_with_nothing_pushable_is_refused(client, project, gh):
 def test_callback_errors_travel_as_codes_not_text(client, project, gh):
     resp = client.get("/api/github/callback/", {"state": "forged", "code": "c", "installation_id": 1})
     assert "github_error=expired" in resp["Location"]
-
-
-def test_the_session_state_is_used_once(client, project, gh):
-    client.post("/api/github/connect/")
-    client.get("/api/github/callback/", {"setup_action": "request"})  # any callback spends it
-    resp = client.get("/api/github/callback/", {"code": "c", "installation_id": 1})
-    assert "github=error" in resp["Location"] and not GitHubConnection.objects.exists()
 
 
 def test_an_unchecked_draft_is_held_in_automatic_mode(project, conn, gh):

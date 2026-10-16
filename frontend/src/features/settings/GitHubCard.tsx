@@ -36,6 +36,8 @@ const CONNECT_ERRORS: Record<string, string> = {
   not_yours: "That GitHub installation isn't one your GitHub account can use.",
   no_push: "Your GitHub account can't push to any repository in that installation.",
   no_installation: "GitHub didn't say which installation to use. Try connecting again.",
+  no_state:
+    "GitHub sent you back without a Luka connection link. If you installed or changed the app on GitHub, click Connect (or Reconnect) here to finish.",
   bad_request: "GitHub sent back an unexpected answer. Try connecting again.",
 };
 

@@ -95,7 +95,7 @@ Draft.objects.filter(project_id=request.data["project"])
 ```
 
 **Connecting GitHub (`apps/publishing/connections.py`).** The install round trip returns through the browser with an `installation_id` anyone can edit. `GET /api/github/callback/` is session-authenticated (not public). It saves an installation only when:
-- a signed, 15-minute `state` names this user and a project they own. The state comes from the query string, or from the user's own session when GitHub doesn't echo it.
+- a signed, 15-minute `state` in the query string names this user and a project they own. GitHub echoes it on the install round trip Connect starts (checked against the registered app). A return without it is refused: it began on GitHub, not from Connect, and nothing ties it to a Luka user or project.
 - GitHub confirms, through the one-time OAuth code, that the installation is among the user's own (`GET /user/installations`).
 
 Either check failing saves nothing. Without the second check, a tenant could attach another customer's installation id and open PRs in their repositories.

@@ -98,6 +98,6 @@ Known gaps, accepted trade-offs and ideas that were left for later.
 ## Index
 | Feature | Summary | Updated |
 |---|---|---|
-| [Blog posts as GitHub pull requests](github-blog-prs.md) | Connect a project's repository through the Luka GitHub App; blog drafts become PRs with one click or automatically, with the site's own frontmatter names. Luka never merges. | 2026-10-15 |
+| [Blog posts as GitHub pull requests](github-blog-prs.md) | Connect a project's repository through the Luka GitHub App; blog drafts become PRs with one click or automatically, with the site's own frontmatter names. Luka never merges. | 2026-10-16 |
 | [Evidence-backed blog topics](evidence-backed-topics.md) | Content Agent topics backed by Reddit questions and keyword search volume and difficulty, ranked by weights you set; topic research fetches Reddit posts that still get replies. | 2026-10-13 |
 | [Reddit Agent feedback, learnings and reply voice](reddit-feedback-learnings.md) | Rate and comment on drafts; the agent folds it into editable learnings for writing and post selection. Plus custom instructions, a human-sounding reply style and replies pitched to the poster. | 2026-10-08 |

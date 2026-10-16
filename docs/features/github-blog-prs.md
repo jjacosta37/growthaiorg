@@ -3,7 +3,7 @@ title: Blog posts as GitHub pull requests
 status: shipped
 prd: docs/prds/0002-github-blog-prs.md
 prs: [18]
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 # Blog posts as GitHub pull requests
 
@@ -74,7 +74,7 @@ In Automatic mode, a failed PR never stops the draft landing in the inbox.
   - a prefilled "new file" link (no app at all)
 
   They give up Automatic mode or Update PR.
-- **Verify the installation on connect.** GitHub returns the installation id through the browser, where anyone can edit it. Luka requires a signed state for this user and project, and a one-time OAuth code proving the installation is among the user's own. Without that, one tenant could open PRs in another's repositories. The check also records which repositories the user can **push** to on GitHub. GitHub lists an installation for anyone who can merely read one of its repositories, and Luka acts with the installation's own access, so only those repositories can be chosen. This was found by the security scan's review.
+- **Verify the installation on connect.** GitHub returns the installation id through the browser, where anyone can edit it. Luka requires a signed state for this user and project, and a one-time OAuth code proving the installation is among the user's own. Without that, one tenant could open PRs in another's repositories. The check also records which repositories the user can **push** to on GitHub. GitHub lists an installation for anyone who can merely read one of its repositories, and Luka acts with the installation's own access, so only those repositories can be chosen. This was found by the security scan's review. The state must come back in the URL, and GitHub returns it there; this was checked against the registered app. An earlier version also accepted a copy kept in the session, in case GitHub dropped it. That copy was removed once the test showed it wasn't needed, because it let a crafted link use a real Connect click for up to 15 minutes.
 - **One new file per post; never edit existing site files.** Concurrent PRs then never conflict, and Luka never edits a site's source code. Sites that list posts in one shared code file have to switch to one file per post first. A live check against a real site showed exactly that.
 - **Renamable standard fields plus constant fields, not a template language.** This covers the common setups (an `excerpt` instead of `description`, an `author`, a `featured` flag) with nothing to inject into. Values are written with `yaml.safe_dump`.
 - **Hold every flagged post in Automatic mode, SEO flags included** (the user's call). Flags are warnings in the inbox, and an unattended PR would bypass them.
@@ -86,7 +86,7 @@ In Automatic mode, a failed PR never stops the draft landing in the inbox.
 ## How it works
 
 ### Flow
-1. **Connect:** `POST /api/github/connect/` returns the install URL with a signed state, which is also kept in the session. GitHub sends the browser to `GET /api/github/callback/`.
+1. **Connect:** `POST /api/github/connect/` returns the install URL with a signed state. GitHub sends the browser to `GET /api/github/callback/` and echoes the state there.
 2. **Callback:** `connections.complete_install` checks the state and project ownership, then calls `verify_installation`. That exchanges the OAuth code, looks for the installation in `GET /user/installations`, and collects the repositories the user can push to. With none, nothing is saved. Errors go back as codes (`ConnectError.code`). The connection is saved as `incomplete`, or `ready` on a reconnect when the saved repository is still reachable.
 3. **Settings:** `connections.save_settings` checks:
    - the repository is in the installation's list and in `allowed_repos`
@@ -181,7 +181,7 @@ Other limits:
   - mapping HTTP failures to Luka's errors, without GitHub's text
   - installation verification
 - `tests/test_publishing.py`: every AC against `FakeGitHost`:
-  - connect, tampered or foreign installations, the session fallback
+  - connect, tampered or foreign installations, a return without `state`
   - settings validation and preview
   - the file format, including YAML-hostile titles
   - create, update, rename, retry and no second PR
@@ -192,11 +192,7 @@ Other limits:
 - **Not yet checked against real GitHub:** AC-2 and AC-17 need the GitHub App registered (README steps).
 
 ## Limitations and follow-ups
-- A connect that GitHub returns without `state` relies on the state kept in the user's session. Whether GitHub echoes `state` when user authorisation is requested during install is (unverified) until the app is registered.
-- **Deferred (Medium, from the security scan): the session-state fallback.**
-  - **The gap:** a callback without `state` uses the state the user's own Connect click put in the session. It is spent on any callback and lasts 15 minutes at most. Within that window, a crafted link could still attach an installation the attacker controls, so the user's posts would go to the attacker's repository once they pick it.
-  - **Why the fallback is there:** it only matters if GitHub omits `state` on the authorise-during-install redirect, which is (unverified).
-  - **The fix:** once the app is registered and GitHub is shown to echo `state`, remove the fallback.
+- **Returns that start on GitHub are refused.** Installing from the app's GitHub page, changing its repository access there, or an owner approving an install request all send the browser to Luka without `state`. Settings then asks the user to click Connect or Reconnect in Luka, which picks up the installation they already made.
 - `GIT_HOST=fake` keeps one fake per process, so in local dev the web and worker processes see different fake repositories.
 - Backlog:
   - checking a published post can be indexed
@@ -221,3 +217,4 @@ Other limits:
 
 ## History
 - 2026-10-15 · #18 · First version.
+- 2026-10-16 · Connecting requires `state` in GitHub's return URL; the session fallback is removed, since the registered app showed GitHub sends it back.

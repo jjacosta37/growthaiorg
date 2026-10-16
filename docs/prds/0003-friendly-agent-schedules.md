@@ -1,7 +1,7 @@
 ---
 id: 0003
 title: Friendly agent schedules
-status: building
+status: shipped
 created: 2026-10-16
 agreed: 2026-10-16
 branch: claude/wonderful-ramanujan-4hgokv
@@ -62,7 +62,7 @@ An agent's schedule today is one of six fixed presets, or a raw cron expression 
 - **AC-13** New projects get today's defaults in the project's timezone: Reddit every 4 hours, Content Mondays at 9:00am, X weekdays at 2:00pm. *(verify: test)*
 - **AC-14** One project's timezone or schedule changes don't affect another project's agents, and a user can't read or change another project's schedule or timezone. *(verify: test)*
 - **AC-15** Wherever an agent's next run is shown today ("Next run in …"), it is still correct after the change, and hovering or expanding it shows the local date and time. *(verify: manual)*
-- **AC-16** The schedule editor works at phone width with no horizontal scroll. *(verify: manual)*
+- **AC-16** The schedule editor fits a phone-width (343px) column with no horizontal overflow. *(verify: manual)*
 - **AC-17** The security register item for the missing minimum cron interval (§14 Medium 4) and the backlog item it relates to are updated or removed, as far as this change fixes them. *(verify: manual)*
 
 ## Decisions
@@ -77,3 +77,4 @@ None.
 
 ## Changes after agreement
 <!-- YYYY-MM-DD · AC-n · what changed · why (approved by the user) -->
+- 2026-10-16 · AC-16 · "works at phone width with no horizontal scroll" became "fits a phone-width (343px) column with no horizontal overflow" · the app shell has a 1024px minimum width on every page, so no single screen can avoid sideways scrolling on a phone; a phone layout for the app is in the backlog (approved by the user)

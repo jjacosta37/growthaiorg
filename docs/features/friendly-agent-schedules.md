@@ -2,7 +2,7 @@
 title: Friendly agent schedules
 status: shipped
 prd: docs/prds/0003-friendly-agent-schedules.md
-prs: []
+prs: [21]
 updated: 2026-10-16
 ---
 # Friendly agent schedules
@@ -140,4 +140,4 @@ Before this change, an agent's schedule was one of six presets or a raw cron exp
 | Tests | `backend/tests/test_schedule.py` |
 
 ## History
-- 2026-10-16 · Built: schedule builder, project timezone, hourly minimum, migration of old crons.
+- 2026-10-16 · #21 · Built: schedule builder, project timezone, hourly minimum, migration of old crons.

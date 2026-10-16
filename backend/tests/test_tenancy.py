@@ -293,3 +293,75 @@ def test_current_project_raises_when_the_user_has_none(rf, db):
     request.session = {}
     with pytest.raises(NoProjectSelected):
         current_project(request)
+
+
+# --- GitHub connection and pull requests (PRD 0002) ---------------------------------------
+
+
+@pytest.fixture
+def github(project, other_project):
+    from apps.publishing import host
+    from apps.publishing.models import GitHubConnection
+    from providers.git_host import FakeGitHost
+
+    host._fake = FakeGitHost()
+    GitHubConnection.objects.create(project=project, installation_id=1, repo="acme/site", base_branch="main",
+                                    allowed_repos=["acme/site"], status="ready")
+    theirs = GitHubConnection.objects.create(project=other_project, installation_id=2, repo="globex/secret-site",
+                                             base_branch="main", status="ready")
+    yield theirs
+    host._fake = None
+
+
+def _blog(project):
+    from apps.inbox import services
+
+    return services.create_draft(project, agent_type="content", kind="blog_post", result=None,
+                                 content={"title": "t", "meta_description": "m", "slug": "s", "keywords": [],
+                                          "body_md": "## b"})
+
+
+def test_github_connection_is_per_project(client, other_client, github):
+    mine = client.get("/api/github/").json()["connection"]
+    assert mine["repo"] == "acme/site"
+    assert other_client.get("/api/github/").json()["connection"]["repo"] == "globex/secret-site"
+    assert "globex" not in str(client.get("/api/github/repos/").json())
+
+
+def test_saving_or_deleting_settings_only_touches_your_own_connection(client, other_project, github):
+    from apps.publishing.models import GitHubConnection
+
+    client.patch("/api/github/connection/", {"repo": "acme/site", "base_branch": "main", "folder": "x"},
+                 format="json")
+    client.delete("/api/github/connection/")
+    theirs = GitHubConnection.objects.get(project=other_project)
+    assert (theirs.repo, theirs.folder) == ("globex/secret-site", "")
+
+
+@pytest.mark.parametrize("path", ["pull-request/", "pull-request/update/"])
+def test_pull_request_actions_refuse_another_tenants_draft(client, other_project, github, path):
+    theirs = _blog(other_project)
+    assert client.post(f"/api/drafts/{theirs.pk}/{path}").status_code == 404
+
+
+def test_preview_never_reads_another_tenants_draft(client, other_project, github):
+    _blog(other_project)
+    assert client.post("/api/github/preview/", {}, format="json").json()["from_draft"] is None
+
+
+def test_the_install_callback_cannot_attach_to_someone_elses_project(client, user, other_project, github):
+    from apps.publishing.connections import connect_state
+    from apps.publishing.models import GitHubConnection
+
+    # A state signed for another user's project, replayed by this user
+    state = connect_state(other_project.owner_id, other_project)
+    resp = client.get("/api/github/callback/", {"state": state, "code": "c", "installation_id": 1})
+    assert "github=error" in resp["Location"]
+    assert GitHubConnection.objects.get(project=other_project).installation_id == 2
+    # A state naming their project but carrying this user's id
+    from django.core import signing
+
+    forged = signing.dumps({"u": user.pk, "p": other_project.pk}, salt="luka.publishing.github-connect")
+    resp = client.get("/api/github/callback/", {"state": forged, "code": "c", "installation_id": 1})
+    assert "github=error" in resp["Location"]
+    assert GitHubConnection.objects.get(project=other_project).installation_id == 2

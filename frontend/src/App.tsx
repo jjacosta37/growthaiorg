@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Shell } from "./components/Shell";
 import { DetailSkeleton } from "./components/feedback";
 import { setProjectId, setUnauthenticatedHandler } from "./lib/api";
-import { keys, useMe, useProject, useProjects } from "./lib/queries";
+import { keys, useMe, useProject, useProjects, useSelectProject } from "./lib/queries";
 import LoginPage from "./features/auth/LoginPage";
 import LandingPage from "./features/landing/LandingPage";
 import OnboardingPage from "./features/onboarding/OnboardingPage";
@@ -43,6 +43,23 @@ export default function App() {
     const current = projects.data?.find((p) => p.is_current) ?? projects.data?.[0];
     setProjectId(current?.id ?? null);
   }, [projects.data]);
+
+  // A link from outside (a pull request's "Open this draft in Luka") names its project in
+  // ?project=, so it opens the right draft even when another project is selected.
+  const selectProject = useSelectProject();
+  useEffect(() => {
+    const wanted = Number(new URLSearchParams(location.search).get("project"));
+    if (!wanted || !projects.data || selectProject.isPending) return;
+    const target = projects.data.find((p) => p.id === wanted);
+    const params = new URLSearchParams(location.search);
+    params.delete("project");
+    const clean = `${location.pathname}${params.size ? `?${params}` : ""}`;
+    if (target && !target.is_current) {
+      selectProject.mutate(target.id, { onSettled: () => navigate(clean, { replace: true }) });
+    } else {
+      navigate(clean, { replace: true });
+    }
+  }, [location.pathname, location.search, projects.data, selectProject, navigate]);
 
   // Two gates, in order: an account with no project at all, then a project that hasn't
   // been onboarded. Both are states the user has to leave before the app is usable.

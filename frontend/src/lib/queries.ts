@@ -43,6 +43,12 @@ import type {
   StatsPayload,
   StatusPayload,
   User,
+  FrontmatterPreview,
+  GitHubRepo,
+  GitHubSettingsInput,
+  GitHubStatus,
+  GitHubConnection,
+  PublishMode,
 } from "./types";
 import { isRunActive } from "./types";
 
@@ -73,6 +79,8 @@ export const keys = {
   policy: ["policy"] as const,
   packs: ["policy", "packs"] as const,
   stats: (weeks: number) => ["stats", weeks] as const,
+  github: ["github"] as const,
+  githubRepos: ["github", "repos"] as const,
 };
 
 /* ------------------------------------------------------------------- auth */
@@ -271,6 +279,7 @@ export function useUpdateAgent<T extends AgentType>(type: T) {
       cron?: string;
       config?: unknown;
       draft_model?: string;
+      publish_mode?: PublishMode;
     }) =>
       api.patch<AgentSummary<T>>(`/agents/${type}/`, body),
     onSuccess: (agent) => {
@@ -382,6 +391,8 @@ export function useDraft(id: number | null) {
     queryKey: keys.draft(id ?? 0),
     queryFn: () => api.get<DraftDetail>(`/drafts/${id}/`),
     enabled: id !== null,
+    // While a pull request is being opened or updated, poll until it lands.
+    refetchInterval: (query) => (query.state.data?.pull_request?.busy ? ACTIVE_POLL_MS : false),
   });
 }
 
@@ -638,3 +649,76 @@ export function useStats(weeks: number) {
 }
 
 export type { Paginated };
+
+/* ----------------------------------------------------------------- github */
+
+export function useGitHub(enabled = true) {
+  return useQuery({
+    queryKey: keys.github,
+    queryFn: () => api.get<GitHubStatus>("/github/"),
+    enabled,
+  });
+}
+
+export function useGitHubRepos(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.githubRepos,
+    queryFn: () => api.get<GitHubRepo[]>("/github/repos/"),
+    enabled,
+    retry: false,
+  });
+}
+
+/** Starts the install round trip: the browser leaves for GitHub and comes back to Settings. */
+export function useConnectGitHub() {
+  return useMutation({
+    mutationFn: () => api.post<{ url: string }>("/github/connect/"),
+    onSuccess: ({ url }) => {
+      window.location.assign(url);
+    },
+  });
+}
+
+export function useSaveGitHubSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: GitHubSettingsInput) => api.patch<GitHubConnection>("/github/connection/", body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.github });
+      void qc.invalidateQueries({ queryKey: keys.agents });
+      void qc.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+}
+
+export function useDisconnectGitHub() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<void>("/github/connection/"),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.github });
+      void qc.invalidateQueries({ queryKey: keys.agents });
+      void qc.invalidateQueries({ queryKey: ["drafts"] });
+    },
+  });
+}
+
+export function useFrontmatterPreview() {
+  return useMutation({
+    mutationFn: (body: Omit<GitHubSettingsInput, "repo" | "base_branch">) =>
+      api.post<FrontmatterPreview>("/github/preview/", body),
+  });
+}
+
+/** "Create PR" and "Update PR": both queue a publish run; the draft polls until it lands. */
+export function usePullRequestAction(id: number, action: "create" | "update") {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<AgentRun>(`/drafts/${id}/pull-request/${action === "update" ? "update/" : ""}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.status });
+      invalidateDraft(qc, id);
+    },
+  });
+}

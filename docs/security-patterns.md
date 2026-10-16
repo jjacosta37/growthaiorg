@@ -41,6 +41,7 @@ Hosting at home changes what a bug costs:
 | Model output → database, config, spend | Everything a model returns | Pydantic schemas, a fixed set of effects, nothing published automatically (§7) |
 | API → browser | Stored model output, crawled URLs, Reddit URLs | React escaping, http(s)-only URLs (§8) |
 | Tenant → operator's wallet | Any setting that multiplies LLM or Apify calls | Limits enforced on the server (§11) |
+| Worker → a tenant's GitHub repository | Which repository and installation a project uses; draft content written into a file and a PR | The GitHub App's installation is verified as the connecting user's (§2); tokens narrowed per step; writes only to `luka/` branches, never the base branch, never a merge (§7) |
 | Worker → keyword data provider | Keywords sent out for search volume and difficulty: model-proposed topic keywords, and the titles and keywords of topics a user requests | A fixed Apify actor (which reads DataForSEO's database), no URLs, keyword length and count caps, a per-call charge cap (§6, §7, §11) |
 
 Luka is multi-tenant: **users own projects, and every domain row hangs off a project.** The worst class of bug is one user reading or changing another user's project.
@@ -93,6 +94,16 @@ Project.objects.get(pk=request.data["project_id"])
 Draft.objects.filter(project_id=request.data["project"])
 ```
 
+**Connecting GitHub (`apps/publishing/connections.py`).** The install round trip returns through the browser with an `installation_id` anyone can edit. `GET /api/github/callback/` is session-authenticated (not public). It saves an installation only when:
+- a signed, 15-minute `state` names this user and a project they own. The state comes from the query string, or from the user's own session when GitHub doesn't echo it.
+- GitHub confirms, through the one-time OAuth code, that the installation is among the user's own (`GET /user/installations`).
+
+Either check failing saves nothing. Without the second check, a tenant could attach another customer's installation id and open PRs in their repositories.
+
+GitHub also lists an installation for anyone who can merely **read** one of its repositories, and Luka then acts with the installation's own access. So the connection also records which repositories the user can push to: `GET /user/installations/{id}/repositories`, keeping only `push` or `admin`. The project can only be pointed at those (`GitHubConnection.allowed_repos`). Otherwise a read-only collaborator could have Luka open PRs in repositories they can't write to, or list private ones.
+
+The callback's errors go back to the browser as codes, which the frontend maps to its own text, so a crafted link can't put arbitrary words on Luka's page.
+
 **Rules:**
 - Serializers must not let a client set `project`, `owner` or other tenancy foreign keys. Set them on the server in `perform_create` / `save(project=...)`.
 - A serializer that accepts the id of a related object must check that the object is in the caller's project. Examples are a `blog_topic` or a `source_reddit_post`.
@@ -125,6 +136,7 @@ Draft.objects.filter(project_id=request.data["project"])
   - `LANGSMITH_API_KEY`
   - `SENTRY_DSN`
   - `LUKA_ADMIN_PASSWORD`
+  - `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_SECRET`. The key signs the app's JWTs, which mint tokens for every repository customers granted. Installation tokens and the one-time user token from connecting are minted per step and never stored, logged or returned.
 - **Not secrets, and acceptable in the repo:**
   - `config/settings/test.py` (`SECRET_KEY="test"`, `ANTHROPIC_API_KEY="test-key"`)
   - the Dockerfile's build-time `DJANGO_SECRET_KEY=collectstatic-only`
@@ -174,7 +186,7 @@ Luka's worker fetches URLs that come from users, such as `website_url`, and from
 
 Until then:
 - **A request from the home IP to a tenant-chosen host is still flagged, as MEDIUM, but fixing it is not required for now.** That covers the crawl and any future link preview, image fetch, URL check or webhook. Scans list each such fetch path in the PR's deferred Medium findings, so the exposure stays visible. Because it's Medium, it doesn't block the gate. Every such fetch must still follow the SSRF rules below, which are **not** relaxed.
-- **Fixed provider APIs are called directly from the mini:** Anthropic, the Apify API, Sentry and LangSmith. Their hosts are fixed in code.
+- **Fixed provider APIs are called directly from the mini:** Anthropic, the Apify API, Sentry, LangSmith and GitHub (`api.github.com`, `github.com`, through `providers/git_host/github.py`, built on `guarded_client`). Their hosts are fixed in code. The repository path a tenant picks is checked against the installation's own repository list before it's used.
 - **Don't add identifying details to tenant-directed requests.** No operator name, email, domain or contact URL in the user agent or headers. The IP is accepted; giving away more than the IP is not.
 - **Don't build anything that relies on the home IP being secret.** A tunnel keeps it out of DNS, but a tenant can still learn it through the crawler.
 - **Keep the eventual fix cheap.** Tenant-directed fetches go through `guarded_client` (`providers/crawl/http.py`). When the egress fix lands, it can then be a single change there, for example a proxy or relay URL from env that production requires.
@@ -241,6 +253,7 @@ Luka's prompts are full of text we don't control: crawled pages, Reddit posts an
 | Score posts, flag compliance issues | reddit / lint | Stored fields only |
 | Choose which of the run's Reddit posts back a proposed topic (`evidence_post_ids`) | content run (`apps/content/pipeline.py`) | Ids are kept only if they were among the posts sent in this run, which are the caller's project's; each post backs at most one topic |
 | Trigger a keyword lookup for the topics it proposes | content run (`apps/content/keywords.py`) | Spend only: at most `KEYWORD_LOOKUPS_PER_RUN` keywords per run, at most 5 per topic, each ≤80 characters and ≤10 words, `APIFY_KEYWORD_MAX_CHARGE_USD` per call; read-only data comes back and only ranks topics a human triages |
+| Open or update a pull request in the project's connected repository, with a blog draft's content as one Markdown file (`apps/publishing/services.py`) | "Create PR" / "Update PR", or a content run when the user chose **Automatic** | A human opted in (each click, or the automatic setting, which needs a ready connection); drafts with any flag are held, not opened, and so are drafts whose compliance check couldn't run (`lint_complete`, fail closed); the repository is the one the user connected and GitHub confirmed; the path is the chosen folder plus a slug that must be lowercase words and hyphens (`BlogContent`), and folders reject `..` and hidden segments; frontmatter is written with `yaml.safe_dump`; writes go only to `luka/…` branches (`check_writable`, refused before any request), a file already on the base branch is never overwritten, and Luka never merges, so a person reviews and merges on GitHub; `@` and `#` in model text are neutralised in the PR so it can't notify people or close issues on merge. **Enforced by Luka's code. GitHub enforces it only on a protected base branch**, because Contents: write is repo-wide; Luka warns when the base branch is unprotected |
 | Write an agent's learnings (`AgentLearnings.writing_md` / `selection_md`), which later drafting and scoring prompts read | `digest_feedback` run (`apps/feedback/`) | Only from the caller's project's feedback; third-party text in the digest input (post titles, draft excerpts) is escaped and delimited as data; shown, editable and rebuildable on the agent page; only shapes drafts and scores, which a human triages |
 
 **Rules:**
@@ -300,6 +313,7 @@ These are banned in application code (not tests or migrations). `test_security_p
   - **Anthropic:** prompts
   - **Apify:** same-site URLs and Reddit search terms; topic keywords and the titles of topics a user requests, sent to the keyword actor, whose operator and data provider (DataForSEO) also see them
   - **LangSmith:** prompt inputs and outputs, only when `LANGSMITH_TRACING` is on
+  - **GitHub:** a blog draft's title, meta description, slug, keywords, body and flags, written to the repository the project's owner connected, and only when a PR is created or updated
   - **Sentry:** identifiers only
   - **An egress proxy or relay, if one is added later (§6):** the URLs the crawler fetches and the responses that come back
 
@@ -324,6 +338,7 @@ The operator's `ANTHROPIC_API_KEY` and `APIFY_TOKEN` pay for **every** tenant. A
   - `web_search_max_uses`
   - `max_tokens`
   - the drafting model: a per-agent choice (`AgentConfig.draft_model`) that changes the price of each drafting call, not the number of calls. Opus costs about 2× Sonnet per draft. The bound is an allowlist: PATCH accepts only a key that `available_draft_models(project)` returns (`apps/agents/draft_models.py`), never a model ID, and it only affects writer-tier drafting prompts
+  - GitHub pull requests: no spend, and bounded by drafts (at most `drafts_per_run` automatic PRs per content run, one PR per draft); the API refuses a second create or update while one is queued for the draft. Each step makes a few API calls with tokens narrowed to the one repository
   - feedback digests: one active digest per project (rebuild returns 409 while one runs), new feedback waits `FEEDBACK_DIGEST_DELAY_SECONDS` so a burst is one call, at most 100 entries per digest, and at most 20 undigested entries passed to a drafting call
 - **Schedules:** an agent cron must not be able to fire more often than a sensible minimum.
 - **"Run now" and regenerate** refuse to start while a run of the same kind is active (the 409 path). Keep that guard on any new trigger.
@@ -413,6 +428,8 @@ These are issues already in `main`. A branch scan does not report them again, **
     - agent runs and run-now
 
     The code is scoped correctly today.
+
+13. **The GitHub App's private key reaches every installed repository** (PRD 0002). GitHub's Contents: write can't be limited to a folder or branch prefix. Anyone holding `GITHUB_APP_PRIVATE_KEY` could therefore push to any **unprotected** branch of every repository customers granted. The key lives in the mini's env file like the other secrets (§4), and Luka's code writes only to `luka/` branches. Mitigations: customers protect their base branch, and Luka warns until they do; installs on selected repositories only; the key can be rotated (GitHub allows two at once). Options that need no write access are in `docs/backlog.md`.
 
 ### Low
 1. The base `SECRET_KEY` default is `dev-insecure-change-me`. Prod requires a real one.

@@ -22,7 +22,7 @@ import {
   useRunNow,
   useUpdateAgent,
 } from "../../lib/queries";
-import { AGENT_TYPES, type AgentType } from "../../lib/types";
+import { AGENT_TYPES, type AgentType, type PublishMode } from "../../lib/types";
 import { ContentConfigForm, RedditConfigForm, XConfigForm } from "./ConfigForms";
 import { LearningsCard } from "./LearningsCard";
 import { ScheduleEditor } from "./ScheduleEditor";
@@ -199,6 +199,41 @@ function AgentBody({ type }: { type: AgentType }) {
                 ))}
               </Select>
             </Field>
+
+            {type === "content" && (
+              <Field
+                label="Pull requests"
+                htmlFor="publish-mode"
+                hint={
+                  data.automatic_available || data.publish_mode === "automatic"
+                    ? "Automatic opens a pull request as soon as a post is written. Posts with flags wait for you."
+                    : "Connect a GitHub repository in Settings to open posts as pull requests automatically."
+                }
+              >
+                <Select
+                  id="publish-mode"
+                  value={data.publish_mode}
+                  disabled={update.isPending || (!data.automatic_available && data.publish_mode === "manual")}
+                  onChange={(e) =>
+                    update.mutate(
+                      { publish_mode: e.target.value as PublishMode },
+                      {
+                        onSuccess: () => toast.show("Pull request mode saved"),
+                        onError: (error) =>
+                          toast.error(
+                            error instanceof ApiError
+                              ? error.fieldErrors.publish_mode?.join(" ") || error.detail
+                              : "Couldn't save the pull request mode",
+                          ),
+                      },
+                    )
+                  }
+                >
+                  <option value="manual">Manual: I press Create PR on each post</option>
+                  <option value="automatic">Automatic: open a PR when a post is written</option>
+                </Select>
+              </Field>
+            )}
 
             <Field label="Schedule">
               <ScheduleEditor

@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.content",
     "apps.xagent",
     "apps.stats",
+    "apps.publishing",
 ]
 
 MIDDLEWARE = [
@@ -208,6 +209,16 @@ APIFY_KEYWORD_ACTOR = env("APIFY_KEYWORD_ACTOR", default="keywordlab/keyword-sea
 KEYWORD_LOOKUPS_PER_RUN = 50
 # $0.02 per run + $0.006 per keyword with data, so 50 keywords cost at most about $0.32.
 APIFY_KEYWORD_MAX_CHARGE_USD = Decimal(env("APIFY_KEYWORD_MAX_CHARGE_USD", default="0.50"))
+# GitHub App for opening blog posts as pull requests (docs/prds/0002-github-blog-prs.md).
+# README has the registration steps. "fake" keeps an in-memory host for local dev and tests.
+GIT_HOST = env("GIT_HOST", default="github")  # "github" | "fake"
+GITHUB_APP_ID = env("GITHUB_APP_ID", default="")
+GITHUB_APP_SLUG = env("GITHUB_APP_SLUG", default="")
+GITHUB_APP_PRIVATE_KEY = env("GITHUB_APP_PRIVATE_KEY", default="").replace("\\n", "\n")
+GITHUB_APP_CLIENT_ID = env("GITHUB_APP_CLIENT_ID", default="")
+GITHUB_APP_CLIENT_SECRET = env("GITHUB_APP_CLIENT_SECRET", default="")
+# Where users reach Luka; the PR description links back to the draft from here.
+LUKA_APP_URL = env("LUKA_APP_URL", default="http://localhost:5173").rstrip("/")
 LLM_BATCH_POLL_SECONDS = env.int("LLM_BATCH_POLL_SECONDS", default=120)
 # Feedback is folded into the learnings digest this long after it arrives, so a burst costs one call.
 FEEDBACK_DIGEST_DELAY_SECONDS = env.int("FEEDBACK_DIGEST_DELAY_SECONDS", default=60)

@@ -11,7 +11,8 @@ class AgentConfig(models.Model):
     """Per-agent settings, editable in the UI. `config` is validated by the agent's Pydantic model."""
 
     class PublishMode(models.TextChoices):
-        MANUAL = "manual"  # drafts land in the inbox; the only mode for the MVP
+        MANUAL = "manual"  # drafts land in the inbox; a person takes them from there
+        AUTOMATIC = "automatic"  # content agent only: also open a PR in the connected repository
 
     project = models.ForeignKey("core.Project", on_delete=models.CASCADE, related_name="agent_configs")
     agent_type = models.CharField(max_length=20, choices=AgentType.choices)
@@ -55,6 +56,7 @@ class AgentRun(models.Model):
         X = "x"
         REGENERATE_DRAFT = "regenerate_draft"
         DIGEST_FEEDBACK = "digest_feedback"
+        PUBLISH_PR = "publish_pr"  # open or update one blog draft's pull request
 
     class Trigger(models.TextChoices):
         SCHEDULED = "scheduled"

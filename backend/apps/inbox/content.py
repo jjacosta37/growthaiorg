@@ -1,6 +1,11 @@
 """Content shape per draft kind. Every DraftVersion.content is validated against one of these."""
 
+import re
+
 from pydantic import BaseModel, Field, field_validator
+
+SLUG_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SLUG_MAX = 100
 
 
 class RedditCommentContent(BaseModel):
@@ -27,11 +32,22 @@ class XContent(BaseModel):
 
 
 class BlogContent(BaseModel):
+    """A blog post draft. The slug names the post's file when it is opened as a pull request."""
+
     title: str = Field(min_length=1)
     meta_description: str
     slug: str
     keywords: list[str]
     body_md: str = Field(min_length=1)
+
+    @field_validator("slug")
+    @classmethod
+    def kebab_slug(cls, v: str) -> str:
+        """Lowercase words separated by single hyphens: safe as a file name and a URL."""
+        v = v.strip()
+        if len(v) > SLUG_MAX or not SLUG_PATTERN.match(v):
+            raise ValueError("Use lowercase letters and numbers, separated by single hyphens (e.g. how-to-start)")
+        return v
 
 
 CONTENT_MODELS: dict[str, type[BaseModel]] = {

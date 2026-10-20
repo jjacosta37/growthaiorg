@@ -7,6 +7,11 @@ class AgentType(models.TextChoices):
     X = "x"
 
 
+def default_schedule() -> dict:
+    """Every 6 hours: the fallback when an agent registers no default of its own."""
+    return {"kind": "every_hours", "hours": 6, "minute": 0}
+
+
 class AgentConfig(models.Model):
     """Per-agent settings, editable in the UI. `config` is validated by the agent's Pydantic model."""
 
@@ -17,7 +22,8 @@ class AgentConfig(models.Model):
     project = models.ForeignKey("core.Project", on_delete=models.CASCADE, related_name="agent_configs")
     agent_type = models.CharField(max_length=20, choices=AgentType.choices)
     enabled = models.BooleanField(default=False)
-    cron = models.CharField(max_length=100, default="0 */6 * * *")
+    # Structured choices in the project's local time; see apps.agents.schedule.
+    schedule = models.JSONField(default=default_schedule)
     config = models.JSONField(default=dict, blank=True)
     publish_mode = models.CharField(max_length=20, choices=PublishMode.choices, default=PublishMode.MANUAL)
     # A key of settings.LLM_DRAFT_MODELS, never a model ID; resolved by apps.agents.draft_models.
@@ -36,11 +42,11 @@ class AgentConfig(models.Model):
         from .registry import get
 
         try:
-            default_cron = get(agent_type).default_cron
+            schedule = dict(get(agent_type).default_schedule)
         except KeyError:
-            default_cron = cls._meta.get_field("cron").default
+            schedule = default_schedule()
         obj, _ = cls.objects.get_or_create(project=project, agent_type=agent_type,
-                                           defaults={"cron": default_cron})
+                                           defaults={"schedule": schedule})
         return obj
 
 

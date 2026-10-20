@@ -155,6 +155,34 @@ def test_drafting_model_is_per_project(client, project, other_client, other_proj
     assert AgentConfig.for_project(other_project, "reddit").draft_model == "sonnet"
 
 
+def test_schedule_and_timezone_are_per_project(client, project, other_client, other_project):
+    other_client.patch("/api/agents/content/", {"enabled": True}, format="json")
+    weekly = {"kind": "weekly", "day": 3, "time": "08:00"}
+    # Aiming the header at someone else's project falls back to your own.
+    resp = client.patch("/api/agents/content/", {"schedule": weekly, "timezone": "Asia/Tokyo"}, format="json",
+                        HTTP_X_PROJECT_ID=str(other_project.pk))
+    assert resp.status_code == 200
+
+    project.refresh_from_db()
+    other_project.refresh_from_db()
+    assert project.timezone == "Asia/Tokyo" and other_project.timezone == ""
+    assert AgentConfig.for_project(project, "content").schedule == weekly
+    assert AgentConfig.for_project(other_project, "content").schedule["kind"] == "weekly"
+    assert AgentConfig.for_project(other_project, "content").schedule["day"] == 1
+    theirs = PeriodicTask.objects.get(name=f"agent:{other_project.pk}:content")
+    assert theirs.crontab.timezone.key == "UTC"
+
+
+def test_schedule_preview_uses_the_callers_project_timezone(client, project, other_client, other_project):
+    other_project.timezone = "Asia/Tokyo"
+    other_project.save()
+    body = {"schedule": {"kind": "daily", "times": ["09:00"]}}
+    resp = client.post("/api/agents/schedule-preview/", body, format="json", HTTP_X_PROJECT_ID=str(other_project.pk))
+    assert resp.json()["summary"] == "Every day at 9:00am (UTC)"
+    assert other_client.post("/api/agents/schedule-preview/", body, format="json").json()["summary"].endswith(
+        "(Asia/Tokyo)")
+
+
 # --- Choosing a project -------------------------------------------------------------------
 
 

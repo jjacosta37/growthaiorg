@@ -20,6 +20,8 @@ class Project(models.Model):
     product_summary = models.TextField(blank=True)
     competitors = models.JSONField(default=list, blank=True)  # [{"name": str, "url": str}]
     onboarded_at = models.DateTimeField(null=True, blank=True)
+    # IANA name for agent schedules; blank until someone saves one, which means UTC.
+    timezone = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -31,6 +33,11 @@ class Project(models.Model):
         return self.name
 
     DEFAULT_NAME = "My project"
+
+    @property
+    def effective_timezone(self) -> str:
+        """The timezone agent schedules run in: the chosen one, else UTC."""
+        return self.timezone or "UTC"
 
 
 class WaitlistSignup(models.Model):

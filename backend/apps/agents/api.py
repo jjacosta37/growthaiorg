@@ -17,7 +17,18 @@ from . import registry
 from .draft_models import available_draft_models, draft_model_options, effective_draft_key
 from .models import AgentConfig, AgentRun, AgentType
 from .runs import RunConflict, create_run
-from .schedule import InvalidCron, next_run_at, parse_cron, sync_periodic_task
+from .schedule import (
+    InvalidSchedule,
+    next_run_at,
+    next_runs,
+    parse_schedule,
+    summary,
+    sync_periodic_task,
+    sync_project_tasks,
+    too_frequent,
+    valid_timezone,
+    writable_schedule,
+)
 from .serializers import AgentRunSerializer
 from .tasks import run_agent_task
 
@@ -45,10 +56,10 @@ def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
     last_finished = runs.exclude(finished_at=None).first()
     nxt = next_run_at(config)
     return {
+        **schedule_summary(project, config),
         "agent_type": spec.agent_type,
         "label": spec.label,
         "enabled": config.enabled,
-        "cron": config.cron,
         "config": spec.config_model.model_validate(config.config).model_dump(),
         "publish_mode": config.publish_mode,
         "automatic_available": _automatic_available(project, spec),
@@ -58,6 +69,23 @@ def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
         "last_error": last_finished.error if last_finished and last_finished.status == "failed" else "",
         "next_run_at": nxt.isoformat() if nxt else None,
         "ready": Draft.objects.filter(project=project, agent_type=spec.agent_type, status=Draft.Status.NEW).count(),
+    }
+
+
+def schedule_summary(project: Project, config: AgentConfig) -> dict:
+    """The schedule fields of the agent summary.
+
+    `too_frequent` flags a schedule saved before the hourly minimum; it keeps running until replaced.
+    """
+    tz = project.effective_timezone
+    schedule = parse_schedule(config.schedule)
+    return {
+        "schedule": schedule.model_dump(),
+        "schedule_summary": summary(schedule, tz),
+        "next_runs": [t.isoformat() for t in next_runs(schedule, tz)],
+        "schedule_warning": "too_frequent" if too_frequent(schedule, tz) else None,
+        "timezone": tz,
+        "timezone_set": bool(project.timezone),
     }
 
 
@@ -77,15 +105,16 @@ class AgentListView(APIView):
 
 class AgentConfigUpdateSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(required=False)
-    cron = serializers.CharField(required=False, max_length=100)
+    schedule = serializers.JSONField(required=False)
+    timezone = serializers.CharField(required=False, max_length=64)
     config = serializers.JSONField(required=False)
     draft_model = serializers.CharField(required=False, max_length=20)
     publish_mode = serializers.ChoiceField(choices=AgentConfig.PublishMode.choices, required=False)
 
 
 class AgentDetailView(APIView):
-    """GET the agent summary; PATCH {enabled?, cron?, config?, draft_model?, publish_mode?} (config is merged,
-    then validated)."""
+    """GET the agent summary; PATCH {enabled?, schedule?, timezone?, config?, draft_model?, publish_mode?}
+    (config is merged, then validated; timezone is the project's and applies to all its agents)."""
 
     @extend_schema(responses={200: dict})
     def get(self, request, agent_type):
@@ -100,12 +129,16 @@ class AgentDetailView(APIView):
         data.is_valid(raise_exception=True)
         config = agent_config(project, spec)
         v = data.validated_data
-        if "cron" in v:
+        if "schedule" in v:
             try:
-                parse_cron(v["cron"])
-            except InvalidCron as exc:
-                return Response({"cron": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
-            config.cron = v["cron"]
+                config.schedule = writable_schedule(v["schedule"]).model_dump()
+            except InvalidSchedule as exc:
+                return Response({"schedule": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+        if "timezone" in v:
+            try:
+                project.timezone = valid_timezone(v["timezone"])
+            except InvalidSchedule as exc:
+                return Response({"timezone": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
         if "config" in v:
             if not isinstance(v["config"], dict):
                 return Response({"config": ["Must be an object"]}, status=status.HTTP_400_BAD_REQUEST)
@@ -127,8 +160,41 @@ class AgentDetailView(APIView):
             config.enabled = v["enabled"]
         with transaction.atomic():
             config.save()
-            sync_periodic_task(config)
+            if "timezone" in v:
+                project.save(update_fields=["timezone", "updated_at"])
+                sync_project_tasks(project)  # local times stay; every agent now runs in the new zone
+            else:
+                sync_periodic_task(config)
         return Response(agent_summary(project, spec))
+
+
+class SchedulePreviewSerializer(serializers.Serializer):
+    schedule = serializers.JSONField()
+    timezone = serializers.CharField(required=False, max_length=64)
+
+
+class SchedulePreviewView(APIView):
+    """POST {schedule, timezone?}: the summary and next 3 runs of an unsaved schedule. Writes nothing."""
+
+    @extend_schema(request=SchedulePreviewSerializer, responses={200: dict})
+    def post(self, request: Request) -> Response:
+        """Validate like a save would, then describe it (timezone defaults to the project's)."""
+        project = current_project(request)
+        data = SchedulePreviewSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        try:
+            tz = valid_timezone(v["timezone"]) if "timezone" in v else project.effective_timezone
+        except InvalidSchedule as exc:
+            return Response({"timezone": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            schedule = writable_schedule(v["schedule"])
+        except InvalidSchedule as exc:
+            return Response({"schedule": [str(exc)]}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            "summary": summary(schedule, tz),
+            "next_runs": [t.isoformat() for t in next_runs(schedule, tz)],
+        })
 
 
 class RunNowView(APIView):

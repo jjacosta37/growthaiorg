@@ -2,7 +2,7 @@
 scheduler and API dispatch through the registry, so adding an agent never touches them."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pydantic import BaseModel
 
@@ -14,7 +14,8 @@ class AgentSpec:
     config_model: type[BaseModel]
     run: Callable  # (run, reporter) -> None
     regenerate: Callable  # (draft, nudge, instruction, run) -> DraftVersion
-    default_cron: str = "0 */6 * * *"
+    # A builder schedule (apps.agents.schedule), in the project's timezone.
+    default_schedule: dict = field(default_factory=lambda: {"kind": "every_hours", "hours": 6, "minute": 0})
 
 
 _agents: dict[str, AgentSpec] = {}

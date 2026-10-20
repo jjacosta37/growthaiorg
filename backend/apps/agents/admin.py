@@ -18,7 +18,17 @@ class AgentRunAdmin(admin.ModelAdmin):
 
 @admin.register(AgentConfig)
 class AgentConfigAdmin(admin.ModelAdmin):
-    list_display = ("agent_type", "enabled", "cron", "publish_mode", "updated_at")
+    list_display = ("agent_type", "enabled", "schedule_summary", "publish_mode", "updated_at")
+
+    @admin.display(description="Schedule")
+    def schedule_summary(self, obj: AgentConfig) -> str:
+        """The schedule in plain words, or the raw JSON if it can't be read."""
+        from .schedule import InvalidSchedule, parse_schedule, summary
+
+        try:
+            return summary(parse_schedule(obj.schedule), obj.project.effective_timezone)
+        except InvalidSchedule:
+            return str(obj.schedule)
 
 
 @admin.register(ExternalUsage)

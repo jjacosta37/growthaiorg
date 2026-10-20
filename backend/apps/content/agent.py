@@ -9,5 +9,5 @@ register(AgentSpec(
     config_model=ContentAgentConfig,
     run=run_content_agent,
     regenerate=regenerate,
-    default_cron="0 9 * * 1",  # Mondays 09:00 UTC
+    default_schedule={"kind": "weekly", "day": 1, "time": "09:00"},  # Mondays
 ))

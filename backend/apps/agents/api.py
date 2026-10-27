@@ -291,6 +291,9 @@ class RedditSkippedView(generics.ListAPIView):
 # --- Reddit "Suggest more" (docs/prds/0004-reddit-target-suggestions.md) -------------------
 
 
+SUGGEST_FAILED = "The suggestion run failed. Try again in a moment."
+
+
 def suggestions_payload(project: Project) -> dict:
     """What the suggestions card shows: pending suggestions, room left, and the latest run's state.
 
@@ -310,7 +313,8 @@ def suggestions_payload(project: Project) -> dict:
 
     return {
         "suggesting": bool(last and last.is_active),
-        "last_error": last.error.split("\n", 1)[0][:300] if last and last.status == AgentRun.Status.FAILED else "",
+        # A fixed message rather than the exception text, which the run's own trail keeps.
+        "last_error": SUGGEST_FAILED if last and last.status == AgentRun.Status.FAILED else "",
         "nothing_new": bool(last and last.status == AgentRun.Status.SUCCEEDED and not pending
                             and last.stats.get("suggested") == 0),
         "subreddits": rows(RedditTargetSuggestion.Kind.SUBREDDIT),

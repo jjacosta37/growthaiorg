@@ -161,7 +161,7 @@ export function TargetSuggestions({ configDirty }: { configDirty: boolean }) {
               className="banner banner--danger row-flex"
               style={{ justifyContent: "space-between" }}
             >
-              <span>Couldn't get suggestions: {data.last_error}</span>
+              <span>{data.last_error}</span>
               <Button size="sm" variant="ghost" onClick={startSuggest}>
                 Retry
               </Button>

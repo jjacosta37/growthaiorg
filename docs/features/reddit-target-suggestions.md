@@ -38,7 +38,7 @@ Users saw run results like "40 found · 38 seen before". There were two causes:
 **States:**
 - **Before the first use:** "Running out of fresh posts?" with a pointer to the button.
 - **Nothing new:** when the model had nothing that survived the filtering: "No new suggestions".
-- **Failure:** a red banner "Couldn't get suggestions: …" with **Retry**. The previous suggestions and the config stay as they were.
+- **Failure:** a red banner "The suggestion run failed. Try again in a moment." with **Retry**. The previous suggestions and the config stay as they were.
 
 **Repeat hint:** when the Reddit Agent is enabled and its time window (hour, day or week) is more than twice the shortest gap between its scheduled runs, a banner under the header says so. For example: "Each run searches the last week of posts but runs every 4 hours, so most results will be posts already seen. A shorter time window or a less frequent schedule fixes that." There's no hint when the agent is disabled or the window is within that bound.
 
@@ -119,7 +119,7 @@ Pending rows are the card. Dismissed rows are kept forever as the "never again" 
   - a success event whose data lists what was suggested and `dropped` (`invalid`, `existing`, `dismissed`, `over_cap`)
   - `stats.suggested`
 - Its LLMCall is attached to the run. Stats counts its cost under **reddit** (`RUN_KIND_GROUP` in `apps/stats/service.py`).
-- A failed call fails the run through `running()`, which reports it to Sentry. The card shows the first line of the error.
+- A failed call fails the run through `running()`, which reports it to Sentry. The card shows a fixed message, not the exception text; the run's error and events hold the detail.
 
 ## Testing
 - `backend/tests/test_reddit_suggestions.py`:

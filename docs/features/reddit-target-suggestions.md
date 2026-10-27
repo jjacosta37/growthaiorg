@@ -2,7 +2,7 @@
 title: Suggest more subreddits and keywords
 status: shipped
 prd: docs/prds/0004-reddit-target-suggestions.md
-prs: []
+prs: [22]
 updated: 2026-10-27
 ---
 # Suggest more subreddits and keywords
@@ -157,4 +157,4 @@ Pending rows are the card. Dismissed rows are kept forever as the "never again" 
 | Card | `frontend/src/features/agents/TargetSuggestions.tsx` |
 
 ## History
-- 2026-10-27 · first version.
+- 2026-10-27 · #22 · first version.

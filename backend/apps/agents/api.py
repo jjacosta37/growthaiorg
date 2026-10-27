@@ -19,6 +19,7 @@ from .models import AgentConfig, AgentRun, AgentType
 from .runs import RunConflict, create_run
 from .schedule import (
     InvalidSchedule,
+    min_gap,
     next_run_at,
     next_runs,
     parse_schedule,
@@ -69,7 +70,33 @@ def agent_summary(project: Project, spec: registry.AgentSpec) -> dict:
         "last_error": last_finished.error if last_finished and last_finished.status == "failed" else "",
         "next_run_at": nxt.isoformat() if nxt else None,
         "ready": Draft.objects.filter(project=project, agent_type=spec.agent_type, status=Draft.Status.NEW).count(),
+        "repeat_hint": repeat_hint(project, config) if spec.agent_type == AgentType.REDDIT else None,
     }
+
+
+TIME_WINDOW_HOURS = {"hour": 1, "day": 24, "week": 168}
+
+
+def repeat_hint(project: Project, config: AgentConfig) -> dict | None:
+    """Flag a Reddit time window more than twice the gap between scheduled runs.
+
+    Each run then searches mostly the same stretch of time as the one before, so most results are
+    posts already seen, whatever the subreddits and keywords. Only for an enabled (scheduled) agent.
+
+    Returns:
+        `{time_window, window_hours, gap_hours}`, or None when there's nothing to flag.
+    """
+    if not config.enabled:
+        return None
+    window = config.config.get("time_window", "day")
+    window_hours = TIME_WINDOW_HOURS.get(window)
+    gap = min_gap(parse_schedule(config.schedule), project.effective_timezone)
+    if window_hours is None or gap is None:
+        return None
+    gap_hours = gap.total_seconds() / 3600
+    if window_hours <= 2 * gap_hours:
+        return None
+    return {"time_window": window, "window_hours": window_hours, "gap_hours": round(gap_hours, 1)}
 
 
 def schedule_summary(project: Project, config: AgentConfig) -> dict:
@@ -259,3 +286,102 @@ class RedditSkippedView(generics.ListAPIView):
         if min_score := self.request.query_params.get("min_score"):
             qs = qs.filter(relevance_score__gte=int(min_score))
         return qs.order_by(F("relevance_score").desc(nulls_last=True), "-fetched_at")
+
+
+# --- Reddit "Suggest more" (docs/prds/0004-reddit-target-suggestions.md) -------------------
+
+
+def suggestions_payload(project: Project) -> dict:
+    """What the suggestions card shows: pending suggestions, room left, and the latest run's state.
+
+    `nothing_new` is true when the latest "Suggest more" succeeded but had nothing new to offer.
+    `last_error` is set when it failed, so the card can offer a retry.
+    """
+    from apps.reddit.config import MAX_KEYWORDS, MAX_SUBREDDITS
+    from apps.reddit.models import RedditTargetSuggestion
+    from apps.reddit.suggestions import pending_suggestions, reddit_config
+
+    _, cfg = reddit_config(project)
+    pending = pending_suggestions(project, cfg)
+    last = AgentRun.objects.filter(project=project, kind=AgentRun.Kind.SUGGEST_REDDIT_TARGETS).first()
+
+    def rows(kind: str) -> list[dict]:
+        return [{"id": r.id, "value": r.value, "reason": r.reason} for r in pending if r.kind == kind]
+
+    return {
+        "suggesting": bool(last and last.is_active),
+        "last_error": last.error.split("\n", 1)[0][:300] if last and last.status == AgentRun.Status.FAILED else "",
+        "nothing_new": bool(last and last.status == AgentRun.Status.SUCCEEDED and not pending
+                            and last.stats.get("suggested") == 0),
+        "subreddits": rows(RedditTargetSuggestion.Kind.SUBREDDIT),
+        "keywords": rows(RedditTargetSuggestion.Kind.KEYWORD),
+        "room": {"subreddits": max(0, MAX_SUBREDDITS - len(cfg.subreddits)),
+                 "keywords": max(0, MAX_KEYWORDS - len(cfg.keywords))},
+        "limits": {"subreddits": MAX_SUBREDDITS, "keywords": MAX_KEYWORDS},
+    }
+
+
+class RedditSuggestionsView(APIView):
+    """GET the pending subreddit and keyword suggestions; POST starts "Suggest more" (409 while one runs)."""
+
+    @extend_schema(responses={200: dict})
+    def get(self, request: Request) -> Response:
+        """Return the suggestions card's state."""
+        return Response(suggestions_payload(current_project(request)))
+
+    @extend_schema(request=None, responses={202: dict})
+    def post(self, request: Request) -> Response:
+        """Queue one suggestion run for the caller's project."""
+        from apps.reddit.tasks import suggest_targets_task
+
+        project = current_project(request)
+        try:
+            run = create_run(project, AgentRun.Kind.SUGGEST_REDDIT_TARGETS)
+        except RunConflict:
+            return Response({"detail": "Already suggesting; results will appear shortly."},
+                            status=status.HTTP_409_CONFLICT)
+        transaction.on_commit(lambda: suggest_targets_task.delay(run.id))
+        return Response(suggestions_payload(project), status=status.HTTP_202_ACCEPTED)
+
+
+class AddSuggestionsSerializer(serializers.Serializer):
+    ids = serializers.ListField(child=serializers.IntegerField(min_value=1), min_length=1, max_length=100)
+
+
+class RedditSuggestionsAddView(APIView):
+    """POST {ids}: append the chosen suggestions to the Reddit Agent's config."""
+
+    @extend_schema(request=AddSuggestionsSerializer, responses={200: dict})
+    def post(self, request: Request) -> Response:
+        """Add the suggestions, or 400 with the reason if a config limit would be exceeded."""
+        from apps.reddit.suggestions import SuggestionLimit, add_suggestions
+
+        project = current_project(request)
+        data = AddSuggestionsSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        try:
+            added = add_suggestions(project, data.validated_data["ids"])
+        except SuggestionLimit as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({**suggestions_payload(project), "added": added})
+
+
+class RedditSuggestionDismissView(APIView):
+    """POST: dismiss one pending suggestion, so it's never suggested again for this project."""
+
+    @extend_schema(request=None, responses={200: dict})
+    def post(self, request: Request, pk: int) -> Response:
+        """Mark the suggestion dismissed; 404 unless it's a pending suggestion of the caller's project."""
+        from django.utils import timezone
+
+        from apps.reddit.models import RedditTargetSuggestion
+
+        project = current_project(request)
+        updated = RedditTargetSuggestion.objects.filter(
+            pk=pk, project=project, status=RedditTargetSuggestion.Status.PENDING,
+        ).update(status=RedditTargetSuggestion.Status.DISMISSED, decided_at=timezone.now())
+        if not updated:
+            from django.http import Http404
+
+            raise Http404("No such suggestion")
+        return Response(suggestions_payload(project))

@@ -6,7 +6,7 @@ from apps.agents.runs import RunReporter, running
 from llm import batch as llm_batch
 from llm.models import LLMBatch
 
-from . import pipeline
+from . import pipeline, suggestions
 
 
 @shared_task
@@ -26,4 +26,16 @@ def poll_scoring_batch(run_id: int) -> None:
         pipeline.finish_batch_run(run, reporter)
 
 
-__all__ = ["poll_scoring_batch", "RunReporter"]
+@shared_task
+def suggest_targets_task(run_id: int) -> None:
+    """Runs "Suggest more" for the Reddit Agent.
+
+    Args:
+        run_id: The queued `suggest_reddit_targets` AgentRun.
+    """
+    run = AgentRun.objects.select_related("project").get(pk=run_id)
+    with running(run) as reporter:
+        suggestions.run_suggest_targets(run, reporter)
+
+
+__all__ = ["poll_scoring_batch", "suggest_targets_task", "RunReporter"]

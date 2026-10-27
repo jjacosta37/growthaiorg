@@ -14,7 +14,7 @@ import { Dialog, EmptyState, ErrorState, useToast } from "../../components/feedb
 import { Button, Field, Select, Toggle, Tooltip } from "../../components/primitives";
 import { ProgressTimeline } from "../../components/feedback";
 import { ApiError } from "../../lib/api";
-import { AGENT_LABEL, dateTime, formatInZone, relative, runSummary } from "../../lib/format";
+import { AGENT_LABEL, dateTime, formatInZone, relative, repeatHintText, runSummary } from "../../lib/format";
 import {
   useAgent,
   useAgentRuns,
@@ -27,6 +27,7 @@ import { ContentConfigForm, RedditConfigForm, XConfigForm } from "./ConfigForms"
 import { LearningsCard } from "./LearningsCard";
 import { ScheduleEditor } from "./ScheduleEditor";
 import { SkippedList } from "./SkippedList";
+import { TargetSuggestions } from "./TargetSuggestions";
 import { TopicBacklog } from "./TopicBacklog";
 import "./agents.css";
 
@@ -45,6 +46,7 @@ function AgentBody({ type }: { type: AgentType }) {
   const runs = useAgentRuns(type);
   const toast = useToast();
   const [openRun, setOpenRun] = useState<number | null>(null);
+  const [configDirty, setConfigDirty] = useState(false);
 
   if (agent.isLoading) {
     return (
@@ -142,6 +144,10 @@ function AgentBody({ type }: { type: AgentType }) {
           <div className="banner banner--danger">{data.last_error}</div>
         )}
 
+        {data.repeat_hint && (
+          <div className="banner banner--info">{repeatHintText(data.repeat_hint)}</div>
+        )}
+
         <section className="card">
           <div className="card__header">
             <span className="card__title">Configuration</span>
@@ -153,6 +159,7 @@ function AgentBody({ type }: { type: AgentType }) {
                 config={data.config as never}
                 onSave={saveConfig}
                 saving={update.isPending}
+                onDirtyChange={setConfigDirty}
               />
             )}
             {type === "content" && (
@@ -242,6 +249,8 @@ function AgentBody({ type }: { type: AgentType }) {
             </Field>
           </div>
         </section>
+
+        {type === "reddit" && <TargetSuggestions configDirty={configDirty} />}
 
         <section className="card">
           <div className="card__header">

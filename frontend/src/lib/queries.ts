@@ -51,6 +51,7 @@ import type {
   PublishMode,
   Schedule,
   SchedulePreview,
+  TargetSuggestions,
 } from "./types";
 import { isRunActive } from "./types";
 
@@ -66,6 +67,7 @@ export const keys = {
   agent: (type: AgentType) => ["agents", type] as const,
   agentRuns: (type: AgentType) => ["agents", type, "runs"] as const,
   learnings: (type: AgentType) => ["agents", type, "learnings"] as const,
+  suggestions: ["agents", "reddit", "suggestions"] as const,
   skipped: (minScore?: number) => ["agents", "reddit", "skipped", minScore ?? null] as const,
   topics: (status?: BlogTopicStatus, sort?: TopicSort) =>
     ["topics", status ?? "all", sort ?? "opportunity"] as const,
@@ -313,6 +315,47 @@ export function useRunNow(type: AgentType) {
       void qc.invalidateQueries({ queryKey: keys.agent(type) });
       void qc.invalidateQueries({ queryKey: keys.agentRuns(type) });
     },
+  });
+}
+
+/* ------------------------------------------------ reddit target suggestions */
+
+export function useRedditSuggestions() {
+  return useQuery({
+    queryKey: keys.suggestions,
+    queryFn: () => api.get<TargetSuggestions>("/agents/reddit/suggestions/"),
+    // Poll while "Suggest more" runs, so the suggestions appear on their own.
+    refetchInterval: (query) => (query.state.data?.suggesting ? ACTIVE_POLL_MS : false),
+  });
+}
+
+export function useSuggestTargets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<TargetSuggestions>("/agents/reddit/suggestions/"),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.suggestions, data);
+      void qc.invalidateQueries({ queryKey: keys.status });
+    },
+  });
+}
+
+export function useAddSuggestions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: number[]) => api.post<TargetSuggestions>("/agents/reddit/suggestions/add/", { ids }),
+    onSuccess: (data) => {
+      qc.setQueryData(keys.suggestions, data);
+      void qc.invalidateQueries({ queryKey: keys.agent("reddit"), exact: true });
+    },
+  });
+}
+
+export function useDismissSuggestion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.post<TargetSuggestions>(`/agents/reddit/suggestions/${id}/dismiss/`),
+    onSuccess: (data) => qc.setQueryData(keys.suggestions, data),
   });
 }
 

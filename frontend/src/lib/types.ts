@@ -26,7 +26,8 @@ export type RunKind =
   | "x"
   | "regenerate_draft"
   | "digest_feedback"
-  | "publish_pr";
+  | "publish_pr"
+  | "suggest_reddit_targets";
 export type RunTrigger = "scheduled" | "manual";
 export type RunStatus =
   | "queued"
@@ -308,6 +309,8 @@ export interface AgentSummary<T extends AgentType = AgentType> {
   last_run: AgentRun | null;
   last_error: string;
   next_run_at: string | null;
+  /** Reddit only: the time window is over twice the gap between scheduled runs, so most results repeat. */
+  repeat_hint: RepeatHint | null;
   ready: number;
 }
 
@@ -649,4 +652,34 @@ export interface StatsPayload {
   dismiss_reasons: Record<AgentType, Record<string, number>>;
   spend: SpendPayload;
   reddit: { scanned: number[]; drafted: number[] };
+}
+
+/* ------------------------------------------------- reddit target suggestions */
+
+export interface RepeatHint {
+  time_window: "hour" | "day" | "week";
+  window_hours: number;
+  gap_hours: number;
+}
+
+export interface TargetSuggestion {
+  id: number;
+  value: string;
+  reason: string;
+}
+
+/** "Suggest more" on the Reddit Agent page: pending suggestions and the latest run's state. */
+export interface TargetSuggestions {
+  suggesting: boolean;
+  last_error: string;
+  /** The latest "Suggest more" succeeded but had nothing new to offer. */
+  nothing_new: boolean;
+  subreddits: TargetSuggestion[];
+  keywords: TargetSuggestion[];
+  /** Slots left under the config's subreddit and keyword limits. */
+  room: { subreddits: number; keywords: number };
+  /** The config's limits on subreddits and keywords. */
+  limits: { subreddits: number; keywords: number };
+  /** Set by "add": how many values were appended to the config. */
+  added?: number;
 }

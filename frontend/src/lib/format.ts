@@ -1,6 +1,6 @@
 /** Display helpers. Pure functions, unit-tested in format.test.ts. */
 
-import type { AgentType, DraftKind, RunStats, RunStatus } from "./types";
+import type { AgentType, DraftKind, RepeatHint, RunStats, RunStatus } from "./types";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -198,4 +198,17 @@ export function formatInZone(iso: string, timeZone: string): string {
     .replace(/\s/g, "")
     .toLowerCase();
   return `${part("weekday")} ${part("day")} ${part("month")}, ${time}`;
+}
+
+/* ---------------------------------------------------------- repeat hint */
+
+const WINDOW_LABEL = { hour: "last hour", day: "last day", week: "last week" } as const;
+
+/** Why most results repeat: each run searches a window much longer than the gap since the last run. */
+export function repeatHintText(hint: RepeatHint): string {
+  const gap = hint.gap_hours === 1 ? "every hour" : `every ${hint.gap_hours} hours`;
+  return (
+    `Each run searches the ${WINDOW_LABEL[hint.time_window]} of posts but runs ${gap}, ` +
+    "so most results will be posts already seen. A shorter time window or a less frequent schedule fixes that."
+  );
 }

@@ -1,7 +1,7 @@
 ---
 id: 0004
 title: Suggest more subreddits and keywords
-status: agreed
+status: building
 created: 2026-10-27
 agreed: 2026-10-27
 branch: claude/stoic-bell-1i47nl

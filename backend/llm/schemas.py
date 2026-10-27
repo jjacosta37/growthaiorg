@@ -55,6 +55,19 @@ class RedditSuggestions(BaseModel):
 # --- Reddit Agent -----------------------------------------------------------------------
 
 
+class KeywordSuggestion(BaseModel):
+    term: str = Field(description="A 1 to 3 word Reddit search term, in the audience's own words.")
+    reason: str = Field(description="One line: what kind of posts it should find, and why they're new.")
+
+
+@register
+class RedditTargetSuggestions(BaseModel):
+    """New subreddits and search terms for the Reddit Agent, none of them already in use or turned down."""
+
+    subreddits: list[SubredditSuggestion]
+    keywords: list[KeywordSuggestion]
+
+
 @register
 class RelevanceScore(BaseModel):
     score: int = Field(description="0-100: how relevant this post is and how well we could help.")

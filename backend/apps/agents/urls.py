@@ -13,6 +13,9 @@ from . import api  # noqa: E402
 urlpatterns += [
     path("agents/", api.AgentListView.as_view()),
     path("agents/reddit/skipped/", api.RedditSkippedView.as_view()),
+    path("agents/reddit/suggestions/", api.RedditSuggestionsView.as_view()),
+    path("agents/reddit/suggestions/add/", api.RedditSuggestionsAddView.as_view()),
+    path("agents/reddit/suggestions/<int:pk>/dismiss/", api.RedditSuggestionDismissView.as_view()),
     path("agents/schedule-preview/", api.SchedulePreviewView.as_view()),
     path("agents/<str:agent_type>/", api.AgentDetailView.as_view()),
     path("agents/<str:agent_type>/run-now/", api.RunNowView.as_view()),

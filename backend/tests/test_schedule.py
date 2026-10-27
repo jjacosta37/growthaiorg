@@ -283,3 +283,12 @@ def test_an_hourly_custom_schedule_is_not_flagged(client, project):
     config.schedule = {"kind": "custom", "cron": "0 9 1,15 * *"}
     config.save()
     assert client.get("/api/agents/reddit/").json()["schedule_warning"] is None
+
+
+def test_min_gap():
+    from datetime import timedelta
+
+    from apps.agents.schedule import min_gap
+
+    assert min_gap(parse_schedule({"kind": "every_hours", "hours": 4, "minute": 0}), "UTC") == timedelta(hours=4)
+    assert min_gap(parse_schedule({"kind": "daily", "times": ["09:00", "17:00"]}), "UTC") == timedelta(hours=8)

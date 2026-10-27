@@ -16,7 +16,8 @@ from llm.models import LLMCall
 AGENTS = ["reddit", "content", "x"]
 # Which agent an LLM call's run belongs to, for spend attribution.
 RUN_KIND_GROUP = {"reddit": "reddit", "content": "content", "x": "x", "onboarding": "context", "recrawl": "context",
-                  "regenerate_doc": "context", "regenerate_draft": "regenerations"}
+                  "regenerate_doc": "context", "regenerate_draft": "regenerations",
+                  "suggest_reddit_targets": "reddit"}
 
 
 def week_starts(weeks: int, now: datetime | None = None) -> list[datetime]:

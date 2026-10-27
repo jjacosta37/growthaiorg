@@ -1,17 +1,16 @@
 import json
 
 import pytest
-
 from apps.agents.models import AgentRun, ExternalUsage
 from apps.agents.runs import create_run
 from apps.agents.tasks import run_agent_task, run_scheduled_agent
-from apps.core.models import Project
 from apps.inbox.models import Draft
 from apps.reddit import tasks as reddit_tasks
 from apps.reddit.models import RedditPost
 from llm.models import LLMBatch, LLMCall
 from llm.prompts import load_prompt
 from providers.reddit import RedditSearchResult
+
 from tests.fakes import message
 from tests.reddit_helpers import configure, install_source, post, reddit_responder
 
@@ -37,7 +36,7 @@ def test_manual_run_scores_sync_and_drafts_above_threshold(project, fake_anthrop
     assert source.queries[0].subreddits == ["projectmanagement"] and source.queries[0].keywords == ["invoicing"]
     assert RedditPost.objects.count() == 4  # duplicate "a" in the same fetch collapsed
     assert run.stats == {"fetched": 5, "new_posts": 4, "duplicates": 1, "scored": 4, "above_threshold": 1,
-                         "threshold": 70, "drafted": 1}
+                         "threshold": 70, "drafted": 1, "by_subreddit": {"projectmanagement": 5}}
 
     draft = Draft.objects.get()
     assert draft.source_reddit_post.reddit_id == "a" and draft.kind == "reddit_comment"

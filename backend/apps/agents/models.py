@@ -63,6 +63,7 @@ class AgentRun(models.Model):
         REGENERATE_DRAFT = "regenerate_draft"
         DIGEST_FEEDBACK = "digest_feedback"
         PUBLISH_PR = "publish_pr"  # open or update one blog draft's pull request
+        SUGGEST_REDDIT_TARGETS = "suggest_reddit_targets"  # "Suggest more" on the Reddit Agent page
 
     class Trigger(models.TextChoices):
         SCHEDULED = "scheduled"

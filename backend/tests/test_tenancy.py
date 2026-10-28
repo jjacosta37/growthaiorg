@@ -133,6 +133,30 @@ def test_topic_evidence_and_sorting_are_scoped(client, project, other_project, s
     assert rows[0]["evidence"] == []
 
 
+def test_reddit_target_suggestions_are_scoped(client, project, other_client, other_project):
+    from apps.reddit.models import RedditTargetSuggestion
+
+    mine = RedditTargetSuggestion.objects.create(project=project, kind="subreddit", value="mine", key="mine")
+    theirs = RedditTargetSuggestion.objects.create(project=other_project, kind="subreddit", value="theirs",
+                                                   key="theirs")
+    RedditTargetSuggestion.objects.create(project=other_project, kind="keyword", value="gone", key="gone",
+                                          status="dismissed")
+
+    assert [r["id"] for r in client.get("/api/agents/reddit/suggestions/").json()["subreddits"]] == [mine.id]
+    # Their row can be neither dismissed nor added; adding it is a no-op, not a leak into either config.
+    assert client.post(f"/api/agents/reddit/suggestions/{theirs.id}/dismiss/").status_code == 404
+    resp = client.post("/api/agents/reddit/suggestions/add/", {"ids": [theirs.id]}, format="json")
+    assert resp.status_code == 200 and resp.json()["added"] == 0
+    theirs.refresh_from_db()
+    assert theirs.status == "pending"
+    assert AgentConfig.for_project(project, "reddit").config.get("subreddits", []) == []
+    assert AgentConfig.for_project(other_project, "reddit").config.get("subreddits", []) == []
+    # A suggest run in one project doesn't block or show in the other.
+    AgentRun.objects.create(project=other_project, kind="suggest_reddit_targets", status="running")
+    assert client.get("/api/agents/reddit/suggestions/").json()["suggesting"] is False
+    assert other_client.get("/api/agents/reddit/suggestions/").json()["subreddits"][0]["value"] == "theirs"
+
+
 def test_agent_config_is_per_project(client, project, other_client, other_project):
     client.patch("/api/agents/reddit/", {"config": {"subreddits": ["mine"]}}, format="json")
     other_client.patch("/api/agents/reddit/", {"config": {"subreddits": ["theirs"]}}, format="json")

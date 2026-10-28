@@ -119,15 +119,16 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, *,
     if result.error and result.provider != "apify":
         reporter.warning(f"Reddit search had a problem (continuing with {len(result.posts)} posts): {result.error}")
     new, dupes = store_new_posts(run.project, run, result.posts, found_by)
-    run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes)
-    run.save(update_fields=["stats"])
     # Counted here rather than in the adapter: which subreddits produced nothing is the fact
     # this step used to hide, and it must not depend on which provider ran the search.
-    by_subreddit = Counter(p.subreddit for p in result.posts)
+    # Kept on the run too, as the history "Suggest more" learns from (apps/reddit/suggestions.py).
+    counts = Counter(p.subreddit.lower() for p in result.posts)
+    by_subreddit = {s: counts.get(s.strip().removeprefix("r/").lower(), 0) for s in subs}
+    run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes, by_subreddit=by_subreddit)
+    run.save(update_fields=["stats"])
     reporter.event(f"Found {len(result.posts)} posts, {len(new)} new",
                    fetched=len(result.posts), new_posts=len(new), duplicates=dupes,
-                   queries=result.queries,
-                   by_subreddit={s: by_subreddit.get(s.strip().removeprefix("r/"), 0) for s in subs})
+                   queries=result.queries, by_subreddit=by_subreddit)
     return new
 
 

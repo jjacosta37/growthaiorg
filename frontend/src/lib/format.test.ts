@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { age, formatInZone, relative, runSummary } from "./format";
+import { age, formatInZone, relative, repeatHintText, runSummary } from "./format";
 
 const NOW = Date.parse("2026-09-19T12:00:00Z");
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -73,5 +73,14 @@ describe("runSummary", () => {
 
   it("keeps a zero count rather than dropping it", () => {
     expect(runSummary("reddit", { fetched: 0, drafted: 0 })).toBe("0 found · 0 drafted");
+  });
+});
+
+describe("repeatHintText", () => {
+  it("names the window and the gap between runs", () => {
+    expect(repeatHintText({ time_window: "week", window_hours: 168, gap_hours: 4 })).toMatch(
+      /^Each run searches the last week of posts but runs every 4 hours, so most results will be posts already seen/,
+    );
+    expect(repeatHintText({ time_window: "day", window_hours: 24, gap_hours: 1 })).toContain("runs every hour,");
   });
 });

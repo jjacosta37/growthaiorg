@@ -51,3 +51,38 @@ class RedditPost(models.Model):
 
     def __str__(self):
         return f"r/{self.subreddit}: {self.title[:60]}"
+
+
+class RedditTargetSuggestion(models.Model):
+    """A subreddit or keyword proposed by "Suggest more", waiting for the user to add or dismiss it.
+
+    Nothing reaches the Reddit Agent's config until a person adds it. Dismissed rows are kept so
+    the same value is never suggested again for the project; pending rows are replaced by the next
+    successful "Suggest more". See docs/prds/0004-reddit-target-suggestions.md.
+    """
+
+    class Kind(models.TextChoices):
+        SUBREDDIT = "subreddit"
+        KEYWORD = "keyword"
+
+    class Status(models.TextChoices):
+        PENDING = "pending"
+        ADDED = "added"
+        DISMISSED = "dismissed"
+
+    project = models.ForeignKey("core.Project", on_delete=models.CASCADE, related_name="reddit_target_suggestions")
+    run = models.ForeignKey("agents.AgentRun", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    value = models.CharField(max_length=100)  # as it would be saved in the config
+    key = models.CharField(max_length=100)  # lowercased `value`, for dedupe
+    reason = models.CharField(max_length=300, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        indexes = [models.Index(fields=["project", "status"])]
+
+    def __str__(self):
+        return f"{self.kind} {self.value} ({self.status})"

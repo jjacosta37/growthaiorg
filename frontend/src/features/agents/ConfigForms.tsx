@@ -71,12 +71,18 @@ export function RedditConfigForm({
   config,
   onSave,
   saving,
+  onDirtyChange,
 }: {
   config: RedditConfig;
   onSave: (config: RedditConfig) => void;
   saving?: boolean;
+  /** Told when unsaved edits appear or go, so "Add" from suggestions can't overwrite them. */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const { draft, setDraft, dirty, reset } = useDraftConfig(config);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   const set = <K extends keyof RedditConfig>(key: K, value: RedditConfig[K]) =>
     setDraft({ ...draft, [key]: value });
 

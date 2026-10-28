@@ -351,10 +351,16 @@ def _local_runs(day: date, crons: list, zone: ZoneInfo) -> list[datetime]:
     return runs
 
 
+def min_gap(schedule: BaseModel, tz: str) -> timedelta | None:
+    """The shortest gap between the next 50 runs, or None if fewer than two are coming up."""
+    runs = next_runs(schedule, tz, n=50)
+    return min((b - a for a, b in zip(runs, runs[1:], strict=False)), default=None)
+
+
 def too_frequent(schedule: BaseModel, tz: str) -> bool:
     """True when two upcoming runs are less than an hour apart (only possible for a custom cron)."""
-    runs = next_runs(schedule, tz, n=50)
-    return any((b - a) < timedelta(minutes=MIN_GAP_MINUTES) for a, b in zip(runs, runs[1:], strict=False))
+    gap = min_gap(schedule, tz)
+    return gap is not None and gap < timedelta(minutes=MIN_GAP_MINUTES)
 
 
 # --------------------------------------------------------------------------- plain words

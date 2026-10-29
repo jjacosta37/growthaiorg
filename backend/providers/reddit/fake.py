@@ -19,7 +19,7 @@ class FakeRedditSource:
         # The reporting fields are filled in too, so the run trail a test asserts on has the
         # same shape as a real one.
         return RedditSearchResult(
-            posts=kept, provider=self.name, status="SUCCEEDED", duration_ms=1,
+            posts=kept, candidates=list(posts), provider=self.name, status="SUCCEEDED", duration_ms=1,
             items_raw=len(posts), queries=len(query.subreddits) or 1,
         )
 

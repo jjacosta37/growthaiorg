@@ -1,6 +1,7 @@
 import json
 
 import pytest
+
 from apps.agents.models import AgentRun, ExternalUsage
 from apps.agents.runs import create_run
 from apps.agents.tasks import run_agent_task, run_scheduled_agent
@@ -10,7 +11,6 @@ from apps.reddit.models import RedditPost
 from llm.models import LLMBatch, LLMCall
 from llm.prompts import load_prompt
 from providers.reddit import RedditSearchResult
-
 from tests.fakes import message
 from tests.reddit_helpers import configure, install_source, post, reddit_responder
 
@@ -36,7 +36,8 @@ def test_manual_run_scores_sync_and_drafts_above_threshold(project, fake_anthrop
     assert source.queries[0].subreddits == ["projectmanagement"] and source.queries[0].keywords == ["invoicing"]
     assert RedditPost.objects.count() == 4  # duplicate "a" in the same fetch collapsed
     assert run.stats == {"fetched": 5, "new_posts": 4, "duplicates": 1, "scored": 4, "above_threshold": 1,
-                         "threshold": 70, "drafted": 1, "by_subreddit": {"projectmanagement": 5}}
+                         "threshold": 70, "drafted": 1, "by_subreddit": {"projectmanagement": 5},
+                         "by_keyword": {"invoicing": 0}}
 
     draft = Draft.objects.get()
     assert draft.source_reddit_post.reddit_id == "a" and draft.kind == "reddit_comment"
@@ -219,6 +220,90 @@ def test_the_fetch_event_names_every_configured_subreddit(project, fake_anthropi
     data = event_with(run, "by_subreddit").data
     assert data["by_subreddit"] == {"projectmanagement": 2, "smallbusiness": 0}
     assert (data["fetched"], data["new_posts"], data["duplicates"]) == (2, 2, 0)
+
+
+def test_the_fetch_event_counts_matches_per_keyword_before_the_max_posts_cut(project, fake_anthropic,
+                                                                             monkeypatch):
+    """Per keyword, with an explicit 0, so a keyword whose search is broken shows up as dead."""
+    configure(project, keywords=["invoicing", "late fees", '"net 30"', "payroll"], max_posts_per_run=1)
+    a, b = post("a", "hi-yes"), post("b", "mid")
+    a.body, b.body = "Invoicing clients who pay LATE, and the fees", "We moved everyone to net 30 terms"
+    install_source(monkeypatch, [a, b])
+    fake_anthropic(responder=reddit_responder())
+
+    run = run_now(project)
+
+    assert run.stats["fetched"] == 1  # only one post kept, but both are counted
+    assert run.stats["by_keyword"] == {"invoicing": 1, "late fees": 1, '"net 30"': 1, "payroll": 0}
+    assert event_with(run, "by_keyword").data["by_keyword"] == run.stats["by_keyword"]
+
+
+def past_searches(project, *stats_list):
+    for stats in stats_list:
+        AgentRun.objects.create(project=project, kind="reddit", status="succeeded", stats=stats)
+
+
+def test_repeated_empty_searches_are_reported_as_an_error(project, fake_anthropic, monkeypatch):
+    """A search that succeeds with nothing looks like a quiet day; several in a row is a failure."""
+    configure(project)
+    install_source(monkeypatch, [])
+    fake_anthropic(responder=reddit_responder())
+    past_searches(project, {"fetched": 0}, {"fetched": 0})
+    captured = []
+    monkeypatch.setattr("apps.agents.runs.sentry_sdk.capture_exception", captured.append)
+
+    run = run_now(project)
+
+    assert run.status == "partial"
+    assert run.stats["errors"] == ["The last 3 searches found no posts at all. The search is probably failing, "
+                                   "not just quiet"]
+    assert [type(e).__name__ for e in captured] == ["SearchYieldError"]
+
+
+def test_a_single_empty_search_is_not_an_error(project, fake_anthropic, monkeypatch):
+    configure(project)
+    install_source(monkeypatch, [])
+    fake_anthropic(responder=reddit_responder())
+    past_searches(project, {"fetched": 4}, {"fetched": 0})
+
+    run = run_now(project)
+
+    assert run.status == "succeeded" and "errors" not in run.stats
+
+
+def keyword_run(project, monkeypatch, fake_anthropic, keywords, history):
+    configure(project, keywords=keywords)
+    p = post("a", "lo")
+    p.body = "Invoicing question"
+    install_source(monkeypatch, [p])
+    fake_anthropic(responder=reddit_responder())
+    past_searches(project, *({"fetched": 1, "by_keyword": h} for h in history))
+    return run_now(project)
+
+
+def test_a_keyword_that_keeps_matching_nothing_is_a_warning(project, fake_anthropic, monkeypatch):
+    history = [{"invoicing": 2, "payroll": 0, "late fees": 1}] * 4
+    run = keyword_run(project, monkeypatch, fake_anthropic, ["invoicing", "payroll", "late fees"], history)
+
+    assert run.status == "succeeded"
+    assert run.stats["warnings"] == ["1 of 3 keywords matched no posts in the last 5 searches"]
+    assert next(e for e in events_of(run) if e.level == "warning").data["dead_keywords"] == ["payroll"]
+
+
+def test_most_keywords_matching_nothing_is_an_error(project, fake_anthropic, monkeypatch):
+    """Most keywords dead at once is the shape of a broken query, not of keywords to tune."""
+    history = [{"invoicing": 1, "payroll": 0, "late fees": 0, "new": 0}] * 4
+    run = keyword_run(project, monkeypatch, fake_anthropic, ["invoicing", "payroll", "late fees"], history)
+
+    assert run.status == "partial"
+    assert run.stats["errors"] == ["2 of 3 keywords matched no posts in the last 5 searches. "
+                                   "The searches are probably failing for them"]
+
+
+def test_keywords_are_only_judged_on_a_full_history(project, fake_anthropic, monkeypatch):
+    """Too few searches, or a keyword added since, is not evidence yet."""
+    short = keyword_run(project, monkeypatch, fake_anthropic, ["invoicing", "payroll"], [{"invoicing": 1}] * 4)
+    assert "warnings" not in short.stats and "errors" not in short.stats
 
 
 def test_the_scoring_event_carries_the_distribution_and_the_top_posts(project, fake_anthropic, monkeypatch):

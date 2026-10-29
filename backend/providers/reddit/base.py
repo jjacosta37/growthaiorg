@@ -35,6 +35,10 @@ class RedditSearch:
 @dataclass
 class RedditSearchResult:
     posts: list[RedditPostData] = field(default_factory=list)
+    # Every distinct post the provider returned, before the `max_posts` cut. The pipeline counts
+    # keyword matches over these: counting only `posts` would make a working keyword look dead
+    # whenever its matches were cut for being older.
+    candidates: list[RedditPostData] = field(default_factory=list)
     provider: str = ""
     resource_id: str = ""
     external_run_id: str = ""

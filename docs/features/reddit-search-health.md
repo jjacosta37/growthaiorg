@@ -2,7 +2,7 @@
 title: Reddit search health
 status: shipped
 prd:
-prs: []
+prs: [23]
 updated: 2026-10-29
 ---
 # Reddit search health
@@ -84,4 +84,4 @@ This feature is the observability. An empty streak or mostly dead keywords shows
 | Tests | `backend/tests/test_reddit_pipeline.py`, `backend/tests/test_reddit_adapter.py` |
 
 ## History
-- 2026-10-29 · first version
+- 2026-10-29 · #23 · first version

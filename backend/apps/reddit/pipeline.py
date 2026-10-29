@@ -1,5 +1,6 @@
 """Reddit Agent: search → dedupe → score relevance → draft replies for the best posts."""
 
+import logging
 from collections import Counter
 from datetime import timedelta
 from urllib.parse import urlsplit
@@ -12,6 +13,7 @@ from apps.agents.draft_models import draft_model_for
 from apps.agents.external import record_external
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
+from apps.core.errors import GENERIC_FAILURE, UserFacingError, public_message
 from apps.core.models import Project
 from apps.feedback.services import learning_variables, selection_learnings
 from apps.inbox import compliance, services
@@ -25,6 +27,8 @@ from providers.reddit import ApifyRedditSource, FakeRedditSource, RedditPostData
 
 from .config import RedditAgentConfig
 from .models import RedditPost
+
+log = logging.getLogger(__name__)
 
 BODY_CHAR_LIMIT = 6000  # long posts are truncated for scoring/drafting (noted in the prompt input)
 ZERO_YIELD_RUNS = 3  # searches in a row with no posts at all before it is reported as a failure
@@ -40,7 +44,11 @@ class SearchYieldError(Exception):
 
 
 def get_source() -> RedditSource:
-    """The configured Reddit source: Apify in production, a fake for local dev."""
+    """The configured Reddit source: Apify in production, a fake for local dev.
+
+    Raises:
+        RuntimeError: Apify is configured but `APIFY_TOKEN` is not set.
+    """
     if settings.REDDIT_SOURCE == "fake":
         return FakeRedditSource()
     if not settings.APIFY_TOKEN:
@@ -127,7 +135,9 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, *,
     if result.error and not result.posts:
         raise RuntimeError(f"Reddit search failed: {result.error}")
     if result.error and result.provider != "apify":
-        reporter.warning(f"Reddit search had a problem (continuing with {len(result.posts)} posts): {result.error}")
+        log.warning("reddit search for run %s had a problem (%s): %s", run.pk, result.provider, result.error)
+        reporter.warning(f"Reddit search had a problem (continuing with {len(result.posts)} posts)",
+                         provider=result.provider, status=result.status)
     new, dupes = store_new_posts(run.project, run, result.posts, found_by)
     # Counted here rather than in the adapter: which subreddits produced nothing is the fact
     # this step used to hide, and it must not depend on which provider ran the search.
@@ -290,7 +300,7 @@ def score_sync(run, reporter, posts: list[RedditPost]) -> None:
             result = llm.complete("reddit.score", post_variables(post), project=run.project, run=run)
             apply_score(post, result.parsed, result.call)
         except llm.LLMError as exc:
-            fail_score(post, str(exc), exc.call)
+            fail_score(post, public_message(exc), exc.call)
             last_exc = exc
     failed = sum(p.score_status == RedditPost.ScoreStatus.FAILED for p in posts)
     if failed:
@@ -321,7 +331,7 @@ def apply_batch_results(run, reporter, b: LLMBatch) -> list[RedditPost]:
         if r.ok:
             apply_score(post, r.parsed, r.call)
         else:
-            fail_score(post, r.error, r.call)
+            fail_score(post, GENERIC_FAILURE, r.call)
     failed = sum(not r.ok for r in results.values())
     if failed:
         reporter.error(f"{failed} post(s) couldn't be scored")
@@ -383,7 +393,7 @@ def draft_replies(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, 
             result = llm.complete("reddit.comment", comment_variables(post, run.project), project=run.project, run=run,
                                   model=model)
         except llm.LLMError as exc:
-            reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {exc}", exc=exc)
+            reporter.error(f"Couldn't draft a reply for “{post.title[:60]}”: {public_message(exc)}", exc=exc)
             continue
         draft = services.create_draft(run.project, agent_type=AgentType.REDDIT, kind=DraftKind.REDDIT_COMMENT,
                                       content=comment_content(result.parsed), result=result, run=run,
@@ -445,11 +455,11 @@ def run_reddit_agent(run: AgentRun, reporter: RunReporter) -> None:
     topic research found since the last run.
 
     Raises:
-        ValueError: The Reddit Agent has no subreddits or keywords.
+        UserFacingError: The Reddit Agent has no subreddits or keywords.
     """
     cfg = load_config(run.project)
     if not cfg.subreddits or not cfg.keywords:
-        raise ValueError("Add at least one subreddit and one keyword to the Reddit Agent config")
+        raise UserFacingError("Add at least one subreddit and one keyword to the Reddit Agent config")
     posts = fetch(run, reporter, cfg)
     if posts and run.trigger == AgentRun.Trigger.SCHEDULED and cfg.batch_scheduled_scoring:
         submit_scoring_batch(run, reporter, posts)

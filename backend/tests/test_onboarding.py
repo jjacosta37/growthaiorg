@@ -6,6 +6,7 @@ from apps.agents.models import AgentConfig, AgentRun
 from apps.agents.runs import create_run
 from apps.context import tasks
 from apps.context.models import ContextDocument, CrawledPage
+from apps.core.errors import GENERIC_FAILURE
 from apps.core.models import Project
 from llm.models import LLMCall
 from llm.prompts import available_versions
@@ -210,7 +211,8 @@ def test_config_error_fails_run_fast(project, fake_anthropic, monkeypatch):
 
     run = run_onboarding(project)
 
-    assert run.status == "failed" and "credentials" in run.error
+    assert run.status == "failed" and run.error == GENERIC_FAILURE
+    assert "401" not in run.error
     assert len(fake.messages.calls) == 1  # stopped at the first doc instead of trying all five
 
 

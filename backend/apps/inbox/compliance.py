@@ -5,6 +5,7 @@ import logging
 import re
 
 import llm
+from apps.core.errors import public_message
 from apps.policy.service import policy_for
 
 from .content import as_text
@@ -59,7 +60,7 @@ def lint(draft: Draft, run=None) -> list[dict]:
         if run is not None:
             from apps.agents.runs import RunReporter  # local: apps.agents imports apps.inbox
 
-            RunReporter(run).warning(f"Compliance lint failed for draft {draft.pk}: {exc}", exc=exc)
+            RunReporter(run).warning(f"Compliance lint failed for draft {draft.pk}: {public_message(exc)}", exc=exc)
     draft.compliance_flags = flags
     draft.save(update_fields=["compliance_flags", "updated_at"])
     return flags

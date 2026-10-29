@@ -11,7 +11,7 @@ from django.conf import settings
 from pydantic import BaseModel, ValidationError
 
 from .context import build_system
-from .errors import LLMConfigError, LLMError, LLMOutputInvalid, LLMRefused, LLMTruncated
+from .errors import LLMConfigError, LLMError, LLMOutputInvalid, error_for_status
 from .models import LLMCall
 from .pricing import compute_cost
 from .prompts import PromptSpec, load_prompt
@@ -230,12 +230,7 @@ class Outcome:
     def raise_for_status(self, spec: PromptSpec, call: LLMCall) -> None:
         if self.status == LLMCall.Status.OK:
             return
-        exc_class = {
-            LLMCall.Status.REFUSED: LLMRefused,
-            LLMCall.Status.TRUNCATED: LLMTruncated,
-            LLMCall.Status.INVALID_OUTPUT: LLMOutputInvalid,
-        }.get(self.status, LLMError)
-        raise exc_class(f"{spec.task}: {self.error}", call=call)
+        raise error_for_status(self.status)(f"{spec.task}: {self.error}", call=call)
 
 
 def interpret_response(spec: PromptSpec, schema, response) -> Outcome:

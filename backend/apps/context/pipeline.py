@@ -15,6 +15,7 @@ from apps.agents.external import record_external
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.agents.schedule import sync_periodic_task
+from apps.core.errors import UserFacingError, public_message
 from apps.core.models import Project
 from apps.policy.models import ContentPolicy
 from apps.policy.packs import all_packs, get_pack
@@ -225,13 +226,13 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
     """
     project = run.project
     if not project.website_url:
-        raise ValueError("Set the website URL first")
+        raise UserFacingError("Set the website URL first")
     overwrite_edited = run.kind == AgentRun.Kind.ONBOARDING or run.params.get("overwrite_edited", False)
     max_pages = int(run.params.get("max_pages") or settings.CRAWL_MAX_PAGES)
 
     pages = crawl_and_store(project, reporter, max_pages)
     if not pages:
-        raise RuntimeError("No readable pages found. Check the URL, or whether the site blocks crawlers.")
+        raise UserFacingError("No readable pages found. Check the URL, or whether the site blocks crawlers.")
     if len(pages) < settings.CONTEXT_MIN_PAGES_WARNING:
         reporter.warning(
             f"Only {len(pages)} readable page(s) found. The documents will be thin; "
@@ -245,7 +246,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
     try:
         identify_project(project, run, reporter, site_block)
     except llm.LLMError as exc:
-        reporter.error(f"Couldn't identify the product: {exc}", exc=exc)
+        reporter.error(f"Couldn't identify the product: {public_message(exc)}", exc=exc)
 
     for kind in AI_DOCS:
         title = DocKind(kind).label
@@ -257,7 +258,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
             generate_document(project, kind, run, site_block)
             reporter.success(f"Wrote {title}")
         except llm.LLMError as exc:
-            reporter.error(f"Couldn't write {title}: {exc}", exc=exc)
+            reporter.error(f"Couldn't write {title}: {public_message(exc)}", exc=exc)
 
     if not is_human_edited(project, DocKind.COMPLIANCE):  # keep it in sync with the policy
         write_compliance_doc(project)
@@ -269,7 +270,7 @@ def run_onboarding(run: AgentRun, reporter: RunReporter) -> None:
         try:
             fn()
         except llm.LLMError as exc:
-            reporter.error(f"{label} failed: {exc}", exc=exc)
+            reporter.error(f"{label} failed: {public_message(exc)}", exc=exc)
 
     if project.onboarded_at is None:
         project.onboarded_at = timezone.now()
@@ -287,7 +288,7 @@ def run_regenerate_document(run: AgentRun, reporter: RunReporter) -> None:
         return
     pages = list(CrawledPage.objects.filter(project=project))
     if not pages:
-        raise RuntimeError("No crawled pages yet. Re-crawl the site first.")
+        raise UserFacingError("No crawled pages yet. Re-crawl the site first.")
     site_block, _ = render_site_block(project, pages)
     reporter.step(f"Writing {title}")
     generate_document(project, kind, run, site_block)

@@ -21,6 +21,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class BatchItemResult:
+    """One collected batch request: its parsed output when `ok`, else why it failed."""
+
     custom_id: str
     ok: bool
     parsed: BaseModel | None

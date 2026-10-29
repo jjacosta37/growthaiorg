@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from apps.agents.models import AgentRun
 from apps.agents.runs import RunReporter
+from apps.core.errors import public_message
 from apps.core.models import Project
 from apps.reddit.config import RedditAgentConfig
 from apps.reddit.models import RedditPost
@@ -63,7 +64,7 @@ def gather_evidence(run: AgentRun, reporter: RunReporter) -> list[RedditPost]:
         try:
             research_posts(run, reporter)
         except RuntimeError as exc:
-            reporter.warning(f"Topic research on Reddit failed, continuing without it: {exc}", exc=exc)
+            reporter.warning(f"Topic research on Reddit failed, continuing without it: {public_message(exc)}", exc=exc)
             return no_evidence(run, reporter, "research_failed", "No Reddit evidence used: the Reddit search failed")
         posts = relevant_posts(run.project, cfg.relevance_threshold)
         if not posts:

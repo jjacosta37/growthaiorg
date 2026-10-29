@@ -1,13 +1,13 @@
 """Run lifecycle helpers shared by every pipeline."""
 
 import logging
-import traceback
 from contextlib import contextmanager
 
 import sentry_sdk
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.errors import public_message
 from llm.tracing import trace_group
 
 from .models import AgentRun, RunEvent
@@ -128,13 +128,13 @@ def running(run: AgentRun):
                 log.exception("run %s failed", run.pk)
                 run.refresh_from_db(fields=["stats"])
                 run.status = AgentRun.Status.FAILED
-                # Summary first so the UI's one-line view is unchanged, traceback after:
-                # truncation then clips the deepest frames, not the useful part.
-                run.error = f"{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}"[:5000]
+                # The client sees only the public message; the exception and its traceback
+                # are in the log line above and the Sentry issue (security-patterns.md §10).
+                run.error = public_message(exc)
                 run.current_step = ""
                 run.finished_at = timezone.now()
                 run.save(update_fields=["status", "error", "current_step", "finished_at"])
-                reporter.event(f"Failed: {exc}", RunEvent.Level.ERROR)
+                reporter.event(f"Failed: {public_message(exc)}", RunEvent.Level.ERROR)
                 return
             if run.status == AgentRun.Status.WAITING_BATCH:
                 return  # a follow-up task will finish it

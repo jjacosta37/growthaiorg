@@ -308,6 +308,14 @@ These are banned in application code (not tests or migrations). `test_security_p
   - DRF's `config.exceptions.exception_handler` logs 5xx errors and returns a generic body.
   - `DEBUG` is False in prod.
   - Run failures give the client a short summary. The traceback belongs in logs and Sentry, not in a serialized field.
+- **Exception text never reaches the client, in an API body or in a run.** Everything a `RunReporter` writes becomes a `RunEvent` and `run.stats` entry that the UI renders, and `AgentRun.error` and `RedditPost.score_error` are serialized too. An exception's message is written for developers. It can hold a provider's response body, a request id, a URL, a file path or a key's fingerprint (a 401 from Anthropic once reached the agent page with its full traceback).
+  - Show `public_message(exc)` (`apps/core/errors.py`). Pass the exception itself as `exc=`, which sends it to the log and Sentry, where the detail is read.
+  - **Failures under the hood stay generic.** A model, provider, credential, server-setup or timeout failure shows only `GENERIC_FAILURE` ("Something went wrong on Luka's side. It has been reported."). The UI never says which part broke or why: not "the AI provider rejected the key", not "the Reddit search failed".
+  - Only a problem the user can fix themselves (their settings or their site, such as "Add at least one subreddit…" or "No readable pages found. Check the URL…") raises `UserFacingError`, whose text is shown. Use `public=` when the developer message carries details.
+  - A provider's `.error` string stays on the `ExternalUsage` / `LLMCall` row and in the log. The run trail says only that the call failed, with its status.
+  - No `import traceback` in app code: `log.exception` / `exc_info=` already send the traceback where it belongs.
+  - `{"detail": str(exc)}` in a view is allowed only for Luka's own domain exceptions (`RunConflict`, `DraftStateError`, `ConnectError`, `InvalidSchedule`, ...), whose messages are written for the user. Never for a provider's or the SDK's exception.
+  - `tests/test_security_patterns.py` checks the reporter calls and `fail_score` mechanically: a caught exception or an `.error` attribute in their arguments fails the build unless it goes through `public_message`.
 - **Logging and Sentry:** follow CLAUDE.md, "Log identifiers, never content." `observability.py` sets `send_default_pii=False`, `max_request_body_size="never"` and no frame locals by default. Don't loosen any of those in a PR.
 - **`RunEvent.data`** is ids, counts, scores, durations and costs only, never crawled text, draft bodies or post bodies. The UI shows it.
 - **Third parties that receive content**, and are allowed to:
@@ -399,10 +407,7 @@ A PR must not:
 These are issues already in `main`. A branch scan does not report them again, **unless the PR makes one worse or touches the code involved without fixing it when the fix is small.** When one is fixed, delete it from this list in the same PR.
 
 ### High
-1. **Internal error text reaches the client:**
-   - `agents/runs.py` stores `traceback.format_exc()` in `AgentRun.error`, which `AgentRunSerializer` and `agent_summary.last_error` expose.
-   - The same goes for the `"Failed: {exc}"` `RunEvent` (`runs.py:137`).
-   - It also goes for `score_error` in the skipped-posts API (`agents/api.py:138`).
+None open.
 
 ### Medium
 1. The login view has no throttle or lockout, and `AUTH_PASSWORD_VALIDATORS` isn't set. With a public login page this is the first thing to fix after the Criticals and Highs.
@@ -473,7 +478,7 @@ These are real issues that the operator has decided to live with for now. Scans 
 | **XSS** | `dangerouslySetInnerHTML`, `rehype-raw`, a permissive `urlTransform` | HIGH |
 | **XSS** | Data URL in `href` / `window.open` without a server-side http(s) check | HIGH |
 | **Deserialization** | Anything in the §9 banned table | CRITICAL |
-| **Errors** | Traceback or internal error text in an API response | HIGH |
+| **Errors** | Traceback or exception/provider error text in an API response, a `RunEvent`, `run.stats` or a serialized field, without `public_message` (§10) | HIGH |
 | **Logging** | Content (page text, drafts, prompts) or PII in logs, Sentry or `RunEvent.data` | MEDIUM (HIGH if a secret) |
 | **Spend** | A call multiplier with no server-side bound | HIGH |
 | **Prod** | `DEBUG=True`, `ALLOWED_HOSTS=["*"]`, secure cookies or SSL redirect off in prod | CRITICAL |

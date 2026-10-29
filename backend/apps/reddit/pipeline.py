@@ -27,6 +27,16 @@ from .config import RedditAgentConfig
 from .models import RedditPost
 
 BODY_CHAR_LIMIT = 6000  # long posts are truncated for scoring/drafting (noted in the prompt input)
+ZERO_YIELD_RUNS = 3  # searches in a row with no posts at all before it is reported as a failure
+KEYWORD_HISTORY_RUNS = 5  # searches a keyword may match nothing in before it is flagged
+
+
+class SearchYieldError(Exception):
+    """A search that keeps succeeding but finds nothing, so the provider or the queries are broken.
+
+    Never raised: it is passed to `reporter.error(exc=...)` so the Sentry issue groups by this type
+    rather than by the message, which names counts that change from run to run.
+    """
 
 
 def get_source() -> RedditSource:
@@ -124,12 +134,89 @@ def fetch(run: AgentRun, reporter: RunReporter, cfg: RedditAgentConfig, *,
     # Kept on the run too, as the history "Suggest more" learns from (apps/reddit/suggestions.py).
     counts = Counter(p.subreddit.lower() for p in result.posts)
     by_subreddit = {s: counts.get(s.strip().removeprefix("r/").lower(), 0) for s in subs}
-    run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes, by_subreddit=by_subreddit)
+    by_keyword = keyword_hits(result.candidates or result.posts, cfg.keywords)
+    history = previous_searches(run)
+    run.stats.update(fetched=len(result.posts), new_posts=len(new), duplicates=dupes, by_subreddit=by_subreddit,
+                     by_keyword=by_keyword)
     run.save(update_fields=["stats"])
     reporter.event(f"Found {len(result.posts)} posts, {len(new)} new",
                    fetched=len(result.posts), new_posts=len(new), duplicates=dupes,
-                   queries=result.queries, by_subreddit=by_subreddit)
+                   queries=result.queries, by_subreddit=by_subreddit, by_keyword=by_keyword)
+    check_search_yield(reporter, len(result.posts), by_keyword, history)
     return new
+
+
+def keyword_matches(keyword: str, text: str) -> bool:
+    """Whether `text` (lowercased) contains the keyword as Reddit search would roughly match it.
+
+    A quoted keyword is an exact phrase; otherwise every word must appear, in any order. Words
+    match as substrings, so "contribution" counts a post about "contributions". It is an
+    approximation of Reddit's matching, which is why a keyword is only flagged after several
+    searches in which it matched nothing.
+    """
+    kw = " ".join(keyword.lower().split())
+    if len(kw) > 2 and kw.startswith('"') and kw.endswith('"'):
+        phrase = kw[1:-1].replace('"', "").strip()
+        return bool(phrase) and phrase in text
+    words = kw.replace('"', "").replace("(", "").replace(")", "").split()
+    return bool(words) and all(w in text for w in words)
+
+
+def keyword_hits(posts: list[RedditPostData], keywords: list[str]) -> dict[str, int]:
+    """How many of `posts` each configured keyword matches, with an explicit 0 for none.
+
+    Computed from the posts rather than from the provider's queries, so it means the same thing
+    whichever provider ran and however it grouped the keywords into searches.
+    """
+    texts = [f"{p.title}\n{p.body}".lower() for p in posts]
+    return {k: sum(keyword_matches(k, t) for t in texts) for k in keywords}
+
+
+def previous_searches(run: AgentRun) -> list[dict]:
+    """Stats of this project's earlier searches of the same run kind, newest first."""
+    limit = max(ZERO_YIELD_RUNS, KEYWORD_HISTORY_RUNS) - 1
+    return list(AgentRun.objects.filter(project=run.project, kind=run.kind, stats__has_key="fetched")
+                .exclude(pk=run.pk).order_by("-created_at").values_list("stats", flat=True)[:limit])
+
+
+def check_search_yield(reporter: RunReporter, fetched: int, by_keyword: dict[str, int],
+                       history: list[dict]) -> None:
+    """Report a search that keeps finding nothing, which a successful run would otherwise hide.
+
+    A provider or query problem looks like a quiet day: the search succeeds and returns nothing.
+    One empty search is normal; `ZERO_YIELD_RUNS` in a row is reported as an error (a Sentry
+    issue). Keywords that matched nothing in each of the last `KEYWORD_HISTORY_RUNS` searches are
+    a warning, worth tuning; when they are most of the keywords, the searches themselves are
+    probably failing, so that is an error too.
+
+    Args:
+        fetched: Posts this search returned.
+        by_keyword: This search's matches per keyword (`keyword_hits`).
+        history: Earlier searches' stats, newest first (`previous_searches`).
+    """
+    earlier = history[: ZERO_YIELD_RUNS - 1]
+    if fetched == 0:
+        if len(earlier) == ZERO_YIELD_RUNS - 1 and all(h.get("fetched") == 0 for h in earlier):
+            message = f"The last {ZERO_YIELD_RUNS} searches found no posts at all"
+            reporter.error(f"{message}. The search is probably failing, not just quiet",
+                           exc=SearchYieldError(message), runs=ZERO_YIELD_RUNS)
+        return  # every keyword is at 0 too; flagging each of them would only repeat this
+    windows = [by_keyword] + [h["by_keyword"] for h in history if isinstance(h.get("by_keyword"), dict)]
+    windows = windows[:KEYWORD_HISTORY_RUNS]
+    if len(windows) < KEYWORD_HISTORY_RUNS:
+        return
+    # Only keywords present in every window: one added since then hasn't had its chance yet.
+    tracked = [k for k in by_keyword if all(k in w for w in windows)]
+    dead = [k for k in tracked if all(w[k] == 0 for w in windows)]
+    if not dead:
+        return
+    message = f"{len(dead)} of {len(tracked)} keywords matched no posts in the last {KEYWORD_HISTORY_RUNS} searches"
+    data = {"dead_keywords": dead, "runs": KEYWORD_HISTORY_RUNS}
+    if len(dead) >= 2 and len(dead) * 2 > len(tracked):
+        reporter.error(f"{message}. The searches are probably failing for them",
+                       exc=SearchYieldError("Most keywords matched no posts"), **data)
+    else:
+        reporter.warning(message, **data)
 
 
 # --- Scoring ----------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from providers.reddit import ApifyRedditSource, RedditSearch
-from providers.reddit.apify import keyword_queries, map_item, search_urls
+from providers.reddit.apify import MAX_QUERY_CHARS, keyword_queries, map_item, search_urls
 
 # Field names and shape copied from a live harshmaur/reddit-scraper run (2026-09-19); values changed.
 LIVE_ITEM = {
@@ -38,7 +38,7 @@ def test_keyword_queries_favor_recall():
     ]
     many = [f"keyword number {i}" for i in range(40)]
     queries = keyword_queries(many)
-    assert len(queries) > 1 and all(len(q) <= 400 for q in queries)
+    assert len(queries) > 1 and all(len(q) <= MAX_QUERY_CHARS <= 240 for q in queries)
     assert sum(q.count("(") for q in queries) == 40  # nothing dropped
 
 

@@ -20,7 +20,9 @@ from .base import RedditPostData, RedditSearch, RedditSearchResult
 
 log = logging.getLogger(__name__)
 
-MAX_QUERY_CHARS = 400  # Reddit rejects very long search queries; split keywords across URLs
+# Reddit search returns nothing (not an error) once `q` passes about 256 characters: in a live test
+# on 2026-10-29, 238 chars matched and 293 matched nothing. Keep a margin and split across URLs.
+MAX_QUERY_CHARS = 230
 
 
 def search_term(keyword: str) -> str:
@@ -172,5 +174,6 @@ class ApifyRedditSource:
                 posts.append(post)
         epoch = datetime.min.replace(tzinfo=None)
         posts.sort(key=lambda p: p.posted_at.replace(tzinfo=None) if p.posted_at else epoch, reverse=True)
+        result.candidates = posts
         result.posts = posts[: query.max_posts]
         result.duration_ms = int((time.monotonic() - started) * 1000)

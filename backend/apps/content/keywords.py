@@ -5,6 +5,7 @@ keyword budget. A topic whose lookup was deferred or failed stays pending and is
 later run; nothing is ever refreshed once it has data.
 """
 
+import logging
 from dataclasses import dataclass, field
 
 from django.conf import settings
@@ -13,6 +14,7 @@ from django.utils import timezone
 from apps.agents.external import record_external
 from apps.agents.models import AgentRun
 from apps.agents.runs import RunReporter
+from apps.core.errors import public_message
 from providers.keywords import (
     ApifyKeywordSource,
     FakeKeywordSource,
@@ -25,6 +27,8 @@ from providers.keywords import (
 
 from .config import ContentAgentConfig
 from .models import BlogTopic
+
+log = logging.getLogger(__name__)
 
 MAX_CANDIDATES = 5
 
@@ -139,7 +143,7 @@ def look_up(run: AgentRun, reporter: RunReporter, cfg: ContentAgentConfig,
     try:
         source = get_keyword_source()
     except RuntimeError as exc:
-        reporter.warning(f"Keyword lookup unavailable: {exc}", exc=exc)
+        reporter.warning(f"Keyword lookup unavailable: {public_message(exc)}", exc=exc)
         outcome.failed = len(included)
         report_lookup(reporter, run, outcome)
         return outcome
@@ -156,7 +160,9 @@ def look_up(run: AgentRun, reporter: RunReporter, cfg: ContentAgentConfig,
             items_raw=result.items_raw,
         )
     elif result.error:
-        reporter.warning(f"Keyword lookup failed: {result.error}", provider=result.provider)
+        # The provider's error text stays in the log; the trail says only that it failed.
+        log.warning("keyword lookup failed for run %s (%s): %s", run.pk, result.provider, result.error)
+        reporter.warning("Keyword lookup failed", provider=result.provider, status=result.status)
     for i in included:
         outcome.data[i] = search_data_for(keyword_lists[i], result)
         outcome.failed += outcome.data[i] is None

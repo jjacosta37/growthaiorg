@@ -5,6 +5,7 @@ import pytest
 from apps.agents.models import AgentRun, ExternalUsage
 from apps.agents.runs import create_run
 from apps.agents.tasks import run_agent_task, run_scheduled_agent
+from apps.core.errors import GENERIC_FAILURE
 from apps.inbox.models import Draft
 from apps.reddit import tasks as reddit_tasks
 from apps.reddit.models import RedditPost
@@ -133,7 +134,7 @@ def test_expired_batch_fails_run(project, fake_anthropic, monkeypatch, settings)
     settings.LLM_BATCH_MAX_AGE_HOURS = 0
     reddit_tasks.poll_scoring_batch(run.pk)
     run.refresh_from_db()
-    assert run.status == "failed" and "didn't finish" in run.error
+    assert run.status == "failed" and run.error == GENERIC_FAILURE
 
 
 def test_scoring_failure_is_partial(project, fake_anthropic, monkeypatch):
@@ -150,7 +151,8 @@ def test_scoring_failure_is_partial(project, fake_anthropic, monkeypatch):
     run = run_now(project)
     assert run.status == "partial"
     failed = RedditPost.objects.get(reddit_id="d")
-    assert failed.score_status == "failed" and "schema" in failed.score_error
+    assert failed.score_status == "failed" and failed.score_error == GENERIC_FAILURE
+    assert "schema" in failed.score_call.error  # the detail stays on the LLMCall row
     assert Draft.objects.count() == 1
 
 
@@ -170,7 +172,9 @@ def test_empty_config_and_search_errors_fail(project, fake_anthropic, monkeypatc
 
     monkeypatch.setattr("apps.reddit.pipeline.get_source", lambda: Broken())
     run = run_now(project)
-    assert run.status == "failed" and "HTTP 401" in run.error
+    assert run.status == "failed" and run.error == GENERIC_FAILURE
+    assert "HTTP 401" not in run.error + " ".join(run.events.values_list("message", flat=True))
+    assert "HTTP 401" not in str(list(run.events.values_list("data", flat=True)))
     assert ExternalUsage.objects.get().error == "HTTP 401"  # failed Apify runs are still recorded
 
 

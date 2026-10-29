@@ -7,9 +7,12 @@ database and nothing else. `record_external` writes the row and reports it in on
 every provider call reads the same way in the trail whatever pipeline made it.
 """
 
+import logging
 from decimal import Decimal
 
 from .models import ExternalUsage
+
+log = logging.getLogger(__name__)
 
 
 def record_external(run, reporter, *, provider: str, purpose: str, message: str,
@@ -19,7 +22,9 @@ def record_external(run, reporter, *, provider: str, purpose: str, message: str,
     """Record one provider call: the ExternalUsage row plus a structured RunEvent.
 
     Reported as a warning when `error` is set, because that is exactly the degraded-but-
-    carried-on case — a provider call that fails outright is the caller's to raise on.
+    carried-on case — a provider call that fails outright is the caller's to raise on. The
+    error text itself goes to the row and the log, never to the RunEvent the client reads:
+    it is the provider's, and can carry anything (security-patterns.md §10).
     """
     usage = ExternalUsage.objects.create(
         project=run.project, agent_run=run, provider=provider, purpose=purpose,
@@ -38,7 +43,8 @@ def record_external(run, reporter, *, provider: str, purpose: str, message: str,
         **data,
     }
     if error:
-        reporter.warning(f"{message}: {error}", **detail, error=error)
+        log.warning("%s call for run %s reported an error: %s", provider, run.pk, error)
+        reporter.warning(f"{message} (the provider reported a problem)", **detail)
     else:
         reporter.event(message, **detail)
     return usage

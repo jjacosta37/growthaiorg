@@ -6,6 +6,7 @@ import pytest
 
 from apps.agents.models import AgentRun, RunEvent
 from apps.agents.runs import RunReporter, create_run, running
+from apps.core.errors import GENERIC_FAILURE, UserFacingError, public_message
 from config.exceptions import exception_handler
 from config.observability import API_LOGGER, RUN_EVENTS_LOGGER, init_sentry
 
@@ -20,18 +21,18 @@ def _failing_run(project):
 
 
 @pytest.mark.django_db
-def test_failed_run_stores_summary_and_traceback(project):
-    """`running()` swallows the exception, so the DB row is the only lasting record of it."""
-    run = _failing_run(project)
+def test_failed_run_logs_the_traceback_and_shows_only_a_public_message(project, caplog):
+    """The client reads `run.error`; the traceback belongs in the log and Sentry (security-patterns.md §10)."""
+    with caplog.at_level(logging.ERROR, logger="apps.agents.runs"):
+        run = _failing_run(project)
     run.refresh_from_db()
 
     assert run.status == AgentRun.Status.FAILED
     assert run.finished_at is not None
     assert run.current_step == ""
-    # Summary first (the UI shows one line), full traceback after it.
-    assert run.error.startswith("ValueError: the pipeline broke")
-    assert "Traceback (most recent call last)" in run.error
-    assert "test_observability.py" in run.error
+    assert run.error == GENERIC_FAILURE
+    record = next(r for r in caplog.records if r.name == "apps.agents.runs")
+    assert record.exc_info and "the pipeline broke" in str(record.exc_info[1])
 
 
 @pytest.mark.django_db
@@ -39,7 +40,28 @@ def test_failed_run_still_reports_an_error_event(project):
     run = _failing_run(project)
     event = RunEvent.objects.filter(run=run, level=RunEvent.Level.ERROR).last()
     assert event is not None
-    assert "the pipeline broke" in event.message
+    assert event.message == f"Failed: {GENERIC_FAILURE}"
+    assert "the pipeline broke" not in event.message
+
+
+def test_only_a_user_facing_error_shows_its_text():
+    class ThirdPartyError(Exception):
+        public = "internal detail from a library"
+
+    assert public_message(ThirdPartyError("boom")) == GENERIC_FAILURE
+    assert public_message(RuntimeError("APIFY_TOKEN is not set")) == GENERIC_FAILURE
+    assert public_message(UserFacingError("Set the website URL first")) == "Set the website URL first"
+    assert public_message(UserFacingError("detail: HTTP 401", public="Check your settings.")) == "Check your settings."
+
+
+@pytest.mark.django_db
+def test_a_user_facing_error_keeps_its_public_text_only(project):
+    run = create_run(project, AgentRun.Kind.REDDIT)
+    with running(run):
+        raise UserFacingError("provider said: token sk-123 rejected", public="The search failed.")
+    run.refresh_from_db()
+    assert run.error == "The search failed."
+    assert "sk-123" not in " ".join(run.events.values_list("message", flat=True))
 
 
 @pytest.mark.django_db

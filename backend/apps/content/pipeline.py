@@ -12,6 +12,7 @@ from apps.agents.draft_models import draft_model_for
 from apps.agents.models import AgentConfig, AgentRun, AgentType
 from apps.agents.runs import RunReporter
 from apps.context.models import CrawledPage
+from apps.core.errors import public_message
 from apps.core.models import Project
 from apps.core.text import is_near_duplicate, slugify
 from apps.inbox import compliance, services
@@ -230,7 +231,7 @@ def draft_post(run: AgentRun, reporter: RunReporter, topic: BlogTopic, cfg: Cont
         result = llm.complete("content.post", post_variables(run.project, topic, cfg), project=run.project, run=run,
                               model=model)
     except llm.LLMError as exc:
-        reporter.error(f"Couldn't write “{topic.title[:70]}”: {exc}", exc=exc)
+        reporter.error(f"Couldn't write “{topic.title[:70]}”: {public_message(exc)}", exc=exc)
         return None
     content = finalize_post(result.parsed, policy_for(run.project).blog_disclaimer)
     draft = services.create_draft(run.project, agent_type=AgentType.CONTENT, kind=DraftKind.BLOG_POST,
